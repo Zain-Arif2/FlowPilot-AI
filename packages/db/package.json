@@ -1,0 +1,25 @@
+{
+  "name": "@flowpilot/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./tenant-transaction": "./src/tenant-transaction.ts",
+    "./repositories": "./src/repositories/index.ts"
+  },
+  "scripts": {
+    "db:generate": "node --env-file=../../.env scripts/prisma-cli.mjs generate",
+    "db:migrate": "node --env-file=../../.env scripts/prisma-cli.mjs migrate dev",
+    "db:migrate:deploy": "node --env-file=../../.env scripts/prisma-cli.mjs migrate deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@flowpilot/shared": "0.1.0",
+    "@prisma/client": "^6.19.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.0"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@flowpilot/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env --import tsx --watch src/main.ts",
+    "build": "tsc --noEmit false --outDir dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1176.0",
+    "@flowpilot/db": "0.1.0",
+    "@flowpilot/shared": "0.1.0",
+    "bullmq": "^5.61.0",
+    "ioredis": "^5.8.2",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^6.5.438",
+    "pino": "^9.14.0",
+    "zod": "^3.25.76"
+  }
+}

@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DocumentStatus {
+  uploading
+  validating
+  ready
+  failed
+  deleting
+}
+
+enum DocumentMediaType {
+  pdf
+  docx
+  txt
+}
+
+enum WorkflowStatus {
+  active
+  archived
+}
+
+enum ApprovalActionType {
+  replace_report
+}
+
+enum ExecutionStatus {
+  queued
+  running
+  waiting_approval
+  succeeded
+  failed
+  cancelled
+}
+
+enum StepStatus {
+  pending
+  running
+  waiting_approval
+  succeeded
+  failed
+  skipped
+}
+
+enum AttemptStatus {
+  running
+  succeeded
+  failed
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+model User {
+  id            String      @id @default(uuid()) @db.Uuid
+  email         String      @unique
+  passwordHash  String
+  createdAt     DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(6)
+  sessions      Session[]
+  workspaces    Workspace[]
+  uploadedFiles Document[]
+}
+
+model Session {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(6)
+  revokedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Workspace {
+  id              String           @id @default(uuid()) @db.Uuid
+  ownerId         String           @db.Uuid
+  name            String
+  createdAt       DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @db.Timestamptz(6)
+  owner           User             @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  documents       Document[]
+  ownedUploads    Document[]       @relation("DocumentUploaderOwner")
+  workflows       Workflow[]
+  executions      Execution[]
+  ownedExecutions Execution[]      @relation("ExecutionCreatorOwner")
+  executionSteps  ExecutionStep[]
+  stepAttempts    StepAttempt[]
+  executionArtifacts ExecutionArtifact[]
+  executionEvents ExecutionEvent[]
+  reports         Report[]
+  approvals       Approval[]
+  decisions       Approval[]        @relation("ApprovalWorkspaceDecider")
+  pendingReports  PendingReport[]
+
+  @@index([ownerId, createdAt])
+  @@unique([id, ownerId])
+}
+
+model Document {
+  id                 String          @id @default(uuid()) @db.Uuid
+  workspaceId        String          @db.Uuid
+  uploadedById       String          @db.Uuid
+  originalName       String
+  mediaType          DocumentMediaType
+  byteSize           Int
+  pageCount          Int?
+  textCharacterCount Int?
+  sourceObjectKey    String          @unique
+  textObjectKey      String?         @unique
+  checksum           String?
+  status             DocumentStatus  @default(uploading)
+  failureCode        String?
+  createdAt          DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime        @updatedAt @db.Timestamptz(6)
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  uploaderWorkspace  Workspace      @relation("DocumentUploaderOwner", fields: [workspaceId, uploadedById], references: [id, ownerId], onDelete: Cascade)
+  uploadedBy         User            @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  executions         Execution[]     @relation("ExecutionDocument")
+  reports            Report[]        @relation("ReportSourceDocument")
+  pendingReports     PendingReport[] @relation("PendingReportSourceDocument")
+  executionArtifacts ExecutionArtifact[] @relation("ExecutionArtifactSourceDocument")
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, createdAt])
+  @@index([uploadedById])
+}
+
+model Workflow {
+  id               String         @id @default(uuid()) @db.Uuid
+  workspaceId      String         @db.Uuid
+  name             String
+  revision         Int            @default(1)
+  definitionVersion Int
+  definition       Json           @db.JsonB
+  status           WorkflowStatus @default(active)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(6)
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executions       Execution[]
+
+  @@unique([workspaceId, id])
+  @@index([workspaceId, updatedAt])
+}
+
+model Execution {
+  id               String           @id @default(uuid()) @db.Uuid
+  workspaceId      String           @db.Uuid
+  workflowId       String           @db.Uuid
+  createdById      String           @db.Uuid
+  documentId       String?          @db.Uuid
+  workflowRevision Int
+  workflowSnapshot Json             @db.JsonB
+  idempotencyKey   String
+  status           ExecutionStatus  @default(queued)
+  startedAt        DateTime?        @db.Timestamptz(6)
+  finishedAt       DateTime?        @db.Timestamptz(6)
+  errorCode        String?
+  errorMessage     String?
+  createdAt        DateTime         @default(now()) @db.Timestamptz(6)
+  workspace        Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow         Workflow        @relation(fields: [workspaceId, workflowId], references: [workspaceId, id], onDelete: Restrict)
+  document         Document?       @relation("ExecutionDocument", fields: [workspaceId, documentId], references: [workspaceId, id], onDelete: Restrict)
+  creatorWorkspace Workspace      @relation("ExecutionCreatorOwner", fields: [workspaceId, createdById], references: [id, ownerId], onDelete: Cascade)
+  steps            ExecutionStep[]
+  artifacts        ExecutionArtifact[]
+  events           ExecutionEvent[]
+  reports          Report[]
+  approvals        Approval[]
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, createdById, idempotencyKey])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@index([workspaceId, workflowId])
+  @@index([workspaceId, documentId])
+  @@index([workspaceId, createdById])
+}
+
+model ExecutionStep {
+  id          String         @id @default(uuid()) @db.Uuid
+  workspaceId String         @db.Uuid
+  executionId String         @db.Uuid
+  nodeId      String
+  actionType  String
+  status      StepStatus     @default(pending)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime       @updatedAt @db.Timestamptz(6)
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  execution   Execution      @relation(fields: [workspaceId, executionId], references: [workspaceId, id], onDelete: Cascade)
+  attempts    StepAttempt[]
+  events      ExecutionEvent[]
+  approval    Approval?
+  artifact    ExecutionArtifact?
+
+  @@unique([workspaceId, id])
+  @@unique([executionId, nodeId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, executionId])
+}
+
+model StepAttempt {
+  id               String        @id @default(uuid()) @db.Uuid
+  workspaceId      String        @db.Uuid
+  executionStepId  String        @db.Uuid
+  attemptNumber    Int
+  status            AttemptStatus @default(running)
+  startedAt         DateTime      @default(now()) @db.Timestamptz(6)
+  finishedAt        DateTime?     @db.Timestamptz(6)
+  errorCode         String?
+  errorMessage      String?
+  workspace         Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  executionStep     ExecutionStep @relation(fields: [workspaceId, executionStepId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, id])
+  @@unique([executionStepId, attemptNumber])
+  @@index([workspaceId, executionStepId])
+}
+
+model ExecutionArtifact {
+  id              String        @id @default(uuid()) @db.Uuid
+  workspaceId     String        @db.Uuid
+  executionId     String        @db.Uuid
+  executionStepId String        @db.Uuid
+  sourceDocumentId String?      @db.Uuid
+  objectKey       String        @unique
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  execution       Execution     @relation(fields: [workspaceId, executionId], references: [workspaceId, id], onDelete: Cascade)
+  executionStep   ExecutionStep @relation(fields: [workspaceId, executionStepId], references: [workspaceId, id], onDelete: Cascade)
+  sourceDocument  Document?     @relation("ExecutionArtifactSourceDocument", fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Restrict)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, executionStepId])
+  @@index([workspaceId, executionId])
+  @@index([workspaceId, sourceDocumentId])
+}
+
+model ExecutionEvent {
+  id              String         @id @default(uuid()) @db.Uuid
+  workspaceId     String         @db.Uuid
+  executionId     String         @db.Uuid
+  executionStepId String?        @db.Uuid
+  eventType       String
+  safeDetails     Json           @default("{}") @db.JsonB
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  workspace       Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  execution       Execution      @relation(fields: [workspaceId, executionId], references: [workspaceId, id], onDelete: Cascade)
+  executionStep   ExecutionStep? @relation(fields: [workspaceId, executionStepId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@index([workspaceId, executionId, createdAt])
+  @@index([workspaceId, executionStepId])
+}
+
+model Report {
+  id               String          @id @default(uuid()) @db.Uuid
+  workspaceId      String          @db.Uuid
+  sourceDocumentId String          @db.Uuid
+  sourceExecutionId String         @db.Uuid
+  title            String
+  content          Json            @db.JsonB
+  revision          Int             @default(1)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(6)
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceDocument    Document        @relation("ReportSourceDocument", fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade)
+  sourceExecution   Execution       @relation(fields: [workspaceId, sourceExecutionId], references: [workspaceId, id], onDelete: Restrict)
+  approvals         Approval[]      @relation("ApprovalTargetReport")
+  pendingReplacements PendingReport[] @relation("PendingReportTarget")
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, sourceExecutionId])
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, sourceDocumentId])
+}
+
+model Approval {
+  id                    String          @id @default(uuid()) @db.Uuid
+  workspaceId           String          @db.Uuid
+  executionId           String          @db.Uuid
+  executionStepId       String          @db.Uuid
+  actionType            ApprovalActionType
+  targetReportId        String          @db.Uuid
+  expectedReportRevision Int
+  status                ApprovalStatus  @default(pending)
+  requestedAt           DateTime        @default(now()) @db.Timestamptz(6)
+  decidedAt             DateTime?       @db.Timestamptz(6)
+  decidedById           String?         @db.Uuid
+  workspace             Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  execution             Execution       @relation(fields: [workspaceId, executionId], references: [workspaceId, id], onDelete: Cascade)
+  executionStep         ExecutionStep   @relation(fields: [workspaceId, executionStepId], references: [workspaceId, id], onDelete: Cascade)
+  targetReport          Report          @relation("ApprovalTargetReport", fields: [workspaceId, targetReportId], references: [workspaceId, id], onDelete: Restrict)
+  decidedByWorkspace    Workspace?      @relation("ApprovalWorkspaceDecider", fields: [workspaceId, decidedById], references: [id, ownerId], onDelete: Restrict)
+  pendingReport         PendingReport?
+
+  @@unique([workspaceId, id])
+  @@unique([executionStepId])
+  @@unique([workspaceId, executionStepId])
+  @@index([workspaceId, status, requestedAt])
+  @@index([workspaceId, executionId])
+  @@index([workspaceId, targetReportId])
+  @@index([workspaceId, decidedById])
+}
+
+model PendingReport {
+  id                     String     @id @default(uuid()) @db.Uuid
+  workspaceId            String     @db.Uuid
+  approvalId             String     @db.Uuid
+  reportId               String     @db.Uuid
+  sourceDocumentId       String     @db.Uuid
+  expectedReportRevision Int
+  proposedContent        Json       @db.JsonB
+  createdAt              DateTime   @default(now()) @db.Timestamptz(6)
+  workspace              Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  approval               Approval   @relation(fields: [workspaceId, approvalId], references: [workspaceId, id], onDelete: Cascade)
+  report                 Report     @relation("PendingReportTarget", fields: [workspaceId, reportId], references: [workspaceId, id], onDelete: Cascade)
+  sourceDocument         Document   @relation("PendingReportSourceDocument", fields: [workspaceId, sourceDocumentId], references: [workspaceId, id], onDelete: Cascade)
+
+  @@unique([workspaceId, id])
+  @@unique([workspaceId, approvalId])
+  @@index([workspaceId, reportId])
+  @@index([workspaceId, sourceDocumentId])
+}
+
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  eventKey    String    @unique
+  eventType   String
+  aggregateId String    @db.Uuid
+  payload     Json      @default("{}") @db.JsonB
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  publishedAt DateTime? @db.Timestamptz(6)
+  attemptCount Int      @default(0)
+
+  @@index([publishedAt, createdAt])
+}

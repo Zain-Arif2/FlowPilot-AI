@@ -8,7 +8,7 @@ const databaseUrl = process.env.DATABASE_URL;
 const migrationUrl = process.env.MIGRATION_URL;
 if (!databaseUrl || !migrationUrl) {
   throw new Error(
-    "Tenant integration tests require DATABASE_URL and MIGRATION_URL; start the Compose database and apply migrations.",
+    "Tenant integration tests require dedicated non-production database URLs; apply migrations before running.",
   );
 }
 

@@ -7,7 +7,6 @@ declare global {
         readonly id: string;
         readonly email: string;
       };
-      sessionTokenHash?: string;
       workspaceContext?: {
         readonly userId: string;
         readonly workspaceId: string;

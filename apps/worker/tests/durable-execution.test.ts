@@ -10,7 +10,7 @@ const redisUrl = process.env.REDIS_URL;
 const databaseUrl = process.env.DATABASE_URL;
 if (!redisUrl || !databaseUrl) {
   throw new Error(
-    "Durable execution integration tests require REDIS_URL and DATABASE_URL; start the Compose services and apply migrations.",
+    "Durable execution integration tests require dedicated non-production Redis and database URLs; apply migrations before running.",
   );
 }
 

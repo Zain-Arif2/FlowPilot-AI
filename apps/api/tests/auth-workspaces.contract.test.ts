@@ -2,7 +2,6 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../src/config.js";
 import { createApp } from "../src/app.js";
-import { hashSessionToken } from "../src/middleware/session.js";
 import { InvalidCredentialsError } from "../src/modules/auth/service.js";
 
 const config = {
@@ -18,8 +17,13 @@ const config = {
   OPENROUTER_API_KEY: "local-key",
   OPENROUTER_MODEL: "approved/model",
   OPENROUTER_TIMEOUT_MS: 30_000,
-  SESSION_COOKIE_NAME: "flowpilot_session",
-  SESSION_COOKIE_SECURE: true,
+  JWT_ACCESS_SECRET: "test-access-secret-at-least-32-chars-long",
+  JWT_REFRESH_SECRET: "test-refresh-secret-at-least-32-chars-long",
+  JWT_ISSUER: "flowpilot-api",
+  JWT_AUDIENCE: "flowpilot-web",
+  JWT_ACCESS_TTL_SECONDS: 900,
+  JWT_REFRESH_TTL_SECONDS: 604_800,
+  COOKIE_SECURE: true,
   APP_ORIGIN: "https://flowpilot.example",
   API_PORT: 3001,
   API_BODY_LIMIT: "1mb",
@@ -46,14 +50,16 @@ const secondWorkspace = {
   name: "Second workspace",
   createdAt: "2026-01-02T00:00:00.000Z",
 };
-const firstToken = "first-user-opaque-session-token";
-const secondToken = "second-user-opaque-session-token";
+const firstToken = "first-user-access-jwt";
+const secondToken = "second-user-access-jwt";
+const firstRefreshToken = "first-user-refresh-jwt";
 
 function createTestApp() {
-  const sessions = new Map([
-    [hashSessionToken(firstToken), firstUser],
-    [hashSessionToken(secondToken), secondUser],
+  const accessTokens = new Map([
+    [firstToken, firstUser],
+    [secondToken, secondUser],
   ]);
+  const refreshTokens = new Map([[firstRefreshToken, firstUser]]);
   const workspaces = [firstWorkspace, secondWorkspace];
   const deletionRequests: Array<{
     userId: string;
@@ -63,7 +69,11 @@ function createTestApp() {
   const services = {
     auth: {
       async register() {
-        return { user: firstUser, sessionToken: firstToken };
+        return {
+          user: firstUser,
+          accessToken: firstToken,
+          refreshToken: firstRefreshToken,
+        };
       },
       async login(input: { email: string; password: string }) {
         if (
@@ -72,13 +82,32 @@ function createTestApp() {
         ) {
           throw new InvalidCredentialsError();
         }
-        return { user: firstUser, sessionToken: firstToken };
+        return {
+          user: firstUser,
+          accessToken: firstToken,
+          refreshToken: firstRefreshToken,
+        };
       },
-      async resolveSession(tokenHash: string) {
-        return sessions.get(tokenHash) ?? null;
+      async refresh(rawRefreshToken: string) {
+        const user = refreshTokens.get(rawRefreshToken);
+        if (!user) return null;
+        refreshTokens.delete(rawRefreshToken);
+        const rotatedRefresh = `${rawRefreshToken}-rotated`;
+        refreshTokens.set(rotatedRefresh, user);
+        return {
+          user,
+          accessToken: `${firstToken}-rotated`,
+          refreshToken: rotatedRefresh,
+        };
       },
-      async revokeSession(tokenHash: string) {
-        sessions.delete(tokenHash);
+      verifyAccessToken(token: string) {
+        return accessTokens.get(token) ?? null;
+      },
+      async logout(rawRefreshToken: string | undefined) {
+        if (rawRefreshToken) {
+          refreshTokens.delete(rawRefreshToken);
+        }
+        accessTokens.delete(firstToken);
       },
     },
     workspaces: {
@@ -125,7 +154,7 @@ function createTestApp() {
       },
     },
   };
-  return { app: createApp(config, services), sessions, deletionRequests };
+  return { app: createApp(config, services), refreshTokens, deletionRequests };
 }
 
 describe("authentication and workspace API contract", () => {
@@ -154,7 +183,7 @@ describe("authentication and workspace API contract", () => {
       .expect(200);
 
     expect(response.body).toEqual(firstUser);
-    expect(response.headers["set-cookie"]?.[0] ?? "").toContain("flowpilot_session=");
+    expect(response.headers["set-cookie"]?.[0] ?? "").toContain("__Host-flowpilot_access=");
   });
 
   it("uses the same credential error for an unknown account and a wrong password", async () => {
@@ -171,7 +200,7 @@ describe("authentication and workspace API contract", () => {
 
   it("lists and creates only creator-owned workspaces", async () => {
     const { app } = createTestApp();
-    const cookie = `flowpilot_session=${firstToken}`;
+    const cookie = `__Host-flowpilot_access=${firstToken}`;
     const list = await request(app)
       .get("/api/v1/workspaces")
       .set("Cookie", cookie)
@@ -190,7 +219,7 @@ describe("authentication and workspace API contract", () => {
 
   it("hides and rejects workspaces owned by another account", async () => {
     const { app } = createTestApp();
-    const cookie = `flowpilot_session=${firstToken}`;
+    const cookie = `__Host-flowpilot_access=${firstToken}`;
     const response = await request(app)
       .patch(`/api/v1/workspaces/${secondWorkspace.id}`)
       .set("Origin", config.APP_ORIGIN)
@@ -206,29 +235,46 @@ describe("authentication and workspace API contract", () => {
     const response = await request(app)
       .patch(`/api/v1/workspaces/${firstWorkspace.id}`)
       .set("Origin", config.APP_ORIGIN)
-      .set("Cookie", `flowpilot_session=${firstToken}`)
+      .set("Cookie", `__Host-flowpilot_access=${firstToken}`)
       .send({ name: "Renamed workspace" })
       .expect(200);
     expect(response.body.name).toBe("Renamed workspace");
     expect(response.body.ownerId).toBe(firstUser.id);
   });
 
-  it("revokes the current opaque session on logout", async () => {
-    const { app, sessions } = createTestApp();
+  it("revokes the refresh token and clears both auth cookies on logout", async () => {
+    const { app, refreshTokens } = createTestApp();
     const response = await request(app)
       .post("/api/v1/auth/logout")
       .set("Origin", config.APP_ORIGIN)
-      .set("Cookie", `flowpilot_session=${firstToken}`)
+      .set(
+        "Cookie",
+        `__Host-flowpilot_access=${firstToken}; __Host-flowpilot_refresh=${firstRefreshToken}`,
+      )
       .expect(204);
 
-    expect(sessions.has(hashSessionToken(firstToken))).toBe(false);
-    expect(response.headers["set-cookie"]?.[0] ?? "").toContain(
-      "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
-    );
+    expect(refreshTokens.has(firstRefreshToken)).toBe(false);
+    const rawSetCookie = response.headers["set-cookie"];
+    const setCookies = Array.isArray(rawSetCookie) ? rawSetCookie : [];
+    expect(setCookies.some((c: string) => c.includes("__Host-flowpilot_access=;"))).toBe(true);
+    expect(setCookies.some((c: string) => c.includes("__Host-flowpilot_refresh=;"))).toBe(true);
     await request(app)
       .get("/api/v1/auth/me")
-      .set("Cookie", `flowpilot_session=${firstToken}`)
+      .set("Cookie", `__Host-flowpilot_access=${firstToken}`)
       .expect(401);
+  });
+
+  it("rotates refresh tokens and issues fresh HttpOnly cookies on /auth/refresh", async () => {
+    const { app, refreshTokens } = createTestApp();
+    const response = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Origin", config.APP_ORIGIN)
+      .set("Cookie", `__Host-flowpilot_refresh=${firstRefreshToken}`)
+      .expect(200);
+
+    expect(response.body).toEqual(firstUser);
+    expect(refreshTokens.has(firstRefreshToken)).toBe(false);
+    expect(refreshTokens.has(`${firstRefreshToken}-rotated`)).toBe(true);
   });
 
   it("allows an owner to request document deletion", async () => {
@@ -238,7 +284,7 @@ describe("authentication and workspace API contract", () => {
     await request(app)
       .delete(`/api/v1/workspaces/${firstWorkspace.id}/documents/${documentId}`)
       .set("Origin", config.APP_ORIGIN)
-      .set("Cookie", `flowpilot_session=${firstToken}`)
+      .set("Cookie", `__Host-flowpilot_access=${firstToken}`)
       .expect(202);
 
     expect(deletionRequests).toEqual([
@@ -258,7 +304,7 @@ describe("authentication and workspace API contract", () => {
         `/api/v1/workspaces/${secondWorkspace.id}/documents/00000000-0000-4000-8000-000000000021`,
       )
       .set("Origin", config.APP_ORIGIN)
-      .set("Cookie", `flowpilot_session=${firstToken}`)
+      .set("Cookie", `__Host-flowpilot_access=${firstToken}`)
       .expect(404);
 
     expect(response.body.error.code).toBe("NOT_FOUND");

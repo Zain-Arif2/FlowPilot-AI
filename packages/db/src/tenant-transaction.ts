@@ -12,6 +12,11 @@ export class TenantAccessError extends Error {
   }
 }
 
+const TENANT_TRANSACTION_OPTIONS = {
+  maxWait: 10_000,
+  timeout: 20_000,
+} as const;
+
 export async function withUserTransaction<T>(
   client: PrismaClient,
   userId: string,
@@ -22,7 +27,7 @@ export async function withUserTransaction<T>(
       SELECT set_config('app.user_id', ${userId}, true)
     `;
     return operation(transaction);
-  });
+  }, TENANT_TRANSACTION_OPTIONS);
 }
 
 export async function withTenantTransaction<T>(
@@ -44,5 +49,5 @@ export async function withTenantTransaction<T>(
     if (!workspace) throw new TenantAccessError();
 
     return operation(transaction);
-  });
+  }, TENANT_TRANSACTION_OPTIONS);
 }

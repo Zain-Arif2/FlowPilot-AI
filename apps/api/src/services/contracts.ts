@@ -6,6 +6,7 @@ import type {
   DocumentUploadIntent,
   DocumentUploadRequest,
   ExecutionDto,
+  ExecutionDetailDto,
   LoginRequest,
   RegisterRequest,
   ReportDto,
@@ -16,18 +17,21 @@ import type {
   WorkflowProposal,
   WorkflowProposalRequest,
   StartExecutionRequest,
+  RetryExecutionRequest,
 } from "@flowpilot/shared";
 
-export interface IssuedSession {
+export interface IssuedAuthTokens {
   readonly user: User;
-  readonly sessionToken: string;
+  readonly accessToken: string;
+  readonly refreshToken: string;
 }
 
 export interface AuthService {
-  register(input: RegisterRequest): Promise<IssuedSession>;
-  login(input: LoginRequest): Promise<IssuedSession>;
-  resolveSession(tokenHash: string): Promise<User | null>;
-  revokeSession(tokenHash: string): Promise<void>;
+  register(input: RegisterRequest): Promise<IssuedAuthTokens>;
+  login(input: LoginRequest): Promise<IssuedAuthTokens>;
+  refresh(rawRefreshToken: string): Promise<IssuedAuthTokens | null>;
+  verifyAccessToken(rawAccessToken: string): User | null;
+  logout(rawRefreshToken: string | undefined): Promise<void>;
 }
 
 export interface WorkspaceService {
@@ -89,6 +93,18 @@ export interface ExecutionService {
     workflowId: string,
     idempotencyKey: string,
     input: StartExecutionRequest,
+  ): Promise<ExecutionDto>;
+  list(userId: string, workspaceId: string): Promise<ExecutionDto[]>;
+  get(
+    userId: string,
+    workspaceId: string,
+    executionId: string,
+  ): Promise<ExecutionDetailDto | null>;
+  retry(
+    userId: string,
+    workspaceId: string,
+    executionId: string,
+    input: RetryExecutionRequest,
   ): Promise<ExecutionDto>;
 }
 

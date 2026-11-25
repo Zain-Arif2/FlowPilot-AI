@@ -6,6 +6,7 @@ import {
   createWorkspaceRepository,
 } from "@flowpilot/db/repositories";
 import { createOpenRouterAdapter } from "@flowpilot/shared/ai/openrouter";
+import { parseRedisUrl, waitForRedisReadyAndPing } from "@flowpilot/shared/redis";
 import { prisma } from "@flowpilot/db/client";
 import { createWorkerObjectStorage } from "./adapters/object-storage.js";
 import { createCleanupProcessor } from "./processors/cleanup.processor.js";
@@ -44,11 +45,40 @@ export async function startWorkerFoundation(): Promise<void> {
   ) {
     throw new Error("OPENROUTER_TIMEOUT_MS must be an integer from 1000 to 120000.");
   }
+  const redisUrl = required("REDIS_URL");
+  const redisTarget = parseRedisUrl(redisUrl);
   await prisma.$connect();
-  const runtime = createQueueRuntime(required("REDIS_URL"));
+  const runtime = createQueueRuntime(redisUrl);
+  const handleRedisError = (error: Error): void => {
+    workerLogger.error(
+      {
+        errorName: error.name,
+        redisHost: redisTarget.host,
+        redisPort: redisTarget.port,
+        redisTls: redisTarget.tls,
+      },
+      "Worker Redis client reported an error",
+    );
+  };
+  runtime.connection.on("error", handleRedisError);
+  runtime.workflowEvents.on("error", handleRedisError);
+  runtime.outboxEvents.on("error", handleRedisError);
+  runtime.documentEvents.on("error", handleRedisError);
+  runtime.cleanupEvents.on("error", handleRedisError);
   try {
-    await runtime.connection.ping();
+    await waitForRedisReadyAndPing(runtime.connection, redisTarget);
   } catch (error) {
+    workerLogger.error(
+      {
+        errorName: error instanceof Error ? error.name : "UNKNOWN",
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown Redis startup error",
+        redisHost: redisTarget.host,
+        redisPort: redisTarget.port,
+        redisTls: redisTarget.tls,
+      },
+      "Worker Redis startup check failed",
+    );
     await runtime.close();
     await prisma.$disconnect();
     throw error;

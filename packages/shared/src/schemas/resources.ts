@@ -143,6 +143,15 @@ export const ExecutionStatusSchema = z.enum([
 export const ExecutionStepSchema = z
   .object({
     stepId: z.string().min(1).max(64),
+    actionType: z
+      .enum([
+        "extract_document",
+        "analyze_document",
+        "create_report",
+        "replace_report",
+        "condition",
+      ])
+      .optional(),
     status: z.enum([
       "pending",
       "running",
@@ -155,6 +164,36 @@ export const ExecutionStepSchema = z
   })
   .strict();
 
+export const ExecutionAttemptSchema = z
+  .object({
+    attemptNumber: z.number().int().positive(),
+    status: z.enum(["running", "succeeded", "failed"]),
+    startedAt: z.string().datetime(),
+    finishedAt: z.string().datetime().optional(),
+    errorCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional(),
+  })
+  .strict();
+
+export const ExecutionHistoryStepSchema = ExecutionStepSchema.extend({
+  attempts: z.array(ExecutionAttemptSchema),
+}).strict();
+
+export const ExecutionEventSchema = z
+  .object({
+    eventType: z.string().min(1).max(64),
+    stepId: z.string().min(1).max(64).optional(),
+    details: z
+      .object({
+        state: z.string().regex(/^[a-z_]{1,64}$/).optional(),
+        errorCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional(),
+        attemptNumber: z.number().int().nonnegative().optional(),
+        elapsedMs: z.number().int().nonnegative().optional(),
+      })
+      .strict(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+
 export const ExecutionSchema = z
   .object({
     id: UuidSchema,
@@ -162,7 +201,20 @@ export const ExecutionSchema = z
     status: ExecutionStatusSchema,
     createdAt: z.string().datetime(),
     steps: z.array(ExecutionStepSchema).optional(),
+    events: z.array(ExecutionEventSchema).optional(),
+    errorCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional(),
   })
+  .strict();
+
+export const ExecutionDetailSchema = ExecutionSchema.extend({
+  steps: z.array(ExecutionHistoryStepSchema),
+  events: z.array(ExecutionEventSchema),
+}).strict();
+
+export const ExecutionListSchema = z.array(ExecutionSchema);
+
+export const RetryExecutionRequestSchema = z
+  .object({ stepId: z.string().min(1).max(64) })
   .strict();
 
 export const StartExecutionRequestSchema = z
@@ -185,4 +237,6 @@ export type ApprovalDto = z.infer<typeof ApprovalSchema>;
 export type ApprovalDetailDto = z.infer<typeof ApprovalDetailSchema>;
 export type ApprovalDecisionRequest = z.infer<typeof ApprovalDecisionRequestSchema>;
 export type ExecutionDto = z.infer<typeof ExecutionSchema>;
+export type ExecutionDetailDto = z.infer<typeof ExecutionDetailSchema>;
+export type RetryExecutionRequest = z.infer<typeof RetryExecutionRequestSchema>;
 export type StartExecutionRequest = z.infer<typeof StartExecutionRequestSchema>;

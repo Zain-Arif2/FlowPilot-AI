@@ -73,12 +73,35 @@ describe("adapter boundaries", () => {
 
     expect(result.summary).toBe("done");
     expect(requestBody).toMatchObject({
+      model: config.model,
       response_format: {
         type: "json_schema",
         json_schema: { strict: true, name: "summary" },
       },
       provider: { require_parameters: true, data_collection: "deny", zdr: true },
     });
+  });
+
+  it("aborts and maps timeouts to PROVIDER_UNAVAILABLE", async () => {
+    const timedOut = createOpenRouterAdapter(
+      { ...config, timeoutMs: 10 },
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+
+    await expect(
+      timedOut.requestStructuredOutput({
+        schemaName: "timeout_check",
+        jsonSchema: { type: "object" },
+        systemPrompt: "",
+        userPrompt: "",
+        validator: z.object({ ok: z.boolean() }),
+      }),
+    ).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
   });
 
   it("maps provider and structured-output failures without exposing provider bodies", async () => {

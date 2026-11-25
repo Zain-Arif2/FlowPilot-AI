@@ -274,4 +274,26 @@ describe("workflow execution processor", () => {
     ]);
     expect(harness.executionStatus()).toBe("succeeded");
   });
+
+  it("does not retry a permanent step failure and marks the execution failed", async () => {
+    const harness = createHarness(
+      workflow([
+        {
+          id: "analyze",
+          kind: "analyze_document",
+          position: { x: 0, y: 0 },
+          config: { sections: ["summary"] },
+        },
+      ]),
+    );
+    vi.spyOn(harness.analysisClient, "requestStructuredOutput").mockRejectedValue(
+      new Error("Permanent validation failure."),
+    );
+
+    await harness.processor({ executionId, workspaceId, userId });
+
+    expect(harness.attemptCounts.get(testUuid(10))).toBe(1);
+    expect(harness.steps[0]?.status).toBe("failed");
+    expect(harness.executionStatus()).toBe("failed");
+  });
 });

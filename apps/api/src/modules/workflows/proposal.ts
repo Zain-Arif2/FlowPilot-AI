@@ -214,7 +214,7 @@ function providerError(error: OpenRouterError): HttpError {
 
 export function createWorkflowProposalService(
   client: WorkflowProposalClient,
-  documents: DocumentRepository,
+  documents: Pick<DocumentRepository, "findById">,
 ) {
   return {
     async propose(

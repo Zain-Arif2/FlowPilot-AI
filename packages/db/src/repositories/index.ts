@@ -3,6 +3,7 @@ export * from "./approval.repository.js";
 export * from "./document.repository.js";
 export * from "./execution.repository.js";
 export * from "./execution-artifact.repository.js";
+export * from "./execution-history.repository.js";
 export * from "./report.repository.js";
 export * from "./workspace-scope.js";
 export * from "./workspace.repository.js";

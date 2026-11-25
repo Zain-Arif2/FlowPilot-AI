@@ -2,19 +2,18 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
-import { readConfig } from "../src/config.js";
+import { getAuthCookieNames, readConfig } from "../src/config.js";
 import { errorHandler } from "../src/middleware/error.js";
 import { requestContext } from "../src/middleware/request-context.js";
 import { createCsrfProtection } from "../src/middleware/csrf.js";
 import {
-  createSessionAuthentication,
-  hashSessionToken,
-  sessionCookieOptions,
-} from "../src/middleware/session.js";
+  authCookieOptions,
+  createJwtAuthentication,
+} from "../src/middleware/auth.js";
 import { createWorkspaceAuthorization } from "../src/middleware/workspace.js";
 
 function createSecurityTestApp(
-  resolveSession: (token: string) => Promise<{ id: string; email: string } | null>,
+  verifyAccessToken: (token: string) => { id: string; email: string } | null,
   verifyWorkspace: (context: {
     userId: string;
     workspaceId: string;
@@ -23,11 +22,11 @@ function createSecurityTestApp(
   const app = express();
   const router = express.Router();
   router.use(createCsrfProtection("http://localhost:3000"));
-  router.use(createSessionAuthentication(resolveSession, "session"));
+  router.use(createJwtAuthentication(verifyAccessToken, "flowpilot_access"));
   router.post(
     "/workspaces/:workspaceId/action",
     createWorkspaceAuthorization(verifyWorkspace),
-    (request, response) => response.status(204).end(),
+    (_request, response) => response.status(204).end(),
   );
   app.use(requestContext);
   app.use("/api/v1", router);
@@ -49,6 +48,8 @@ describe("API security middleware", () => {
         OBJECT_STORAGE_SECRET_KEY: "local-secret",
         OPENROUTER_API_KEY: "local-key",
         OPENROUTER_MODEL: "approved/model",
+        JWT_ACCESS_SECRET: "test-access-secret-at-least-32-chars-long",
+        JWT_REFRESH_SECRET: "test-refresh-secret-at-least-32-chars-long",
         APP_ORIGIN: "http://localhost:3000",
       }),
     );
@@ -62,7 +63,7 @@ describe("API security middleware", () => {
 
   it("denies unauthenticated workspace actions without revealing resources", async () => {
     const app = createSecurityTestApp(
-      async () => null,
+      () => null,
       async () => true,
     );
     const response = await request(app)
@@ -76,50 +77,58 @@ describe("API security middleware", () => {
 
   it("returns the same not-found response for a workspace not owned by the user", async () => {
     const app = createSecurityTestApp(
-      async () => ({ id: "user-1", email: "u@example.com" }),
+      () => ({ id: "user-1", email: "u@example.com" }),
       async () => false,
     );
     const response = await request(app)
       .post("/api/v1/workspaces/00000000-0000-4000-8000-000000000001/action")
       .set("Origin", "http://localhost:3000")
-      .set("Cookie", "session=valid-token")
+      .set("Cookie", "flowpilot_access=valid-jwt")
       .expect(404);
 
     expect(response.body.error.code).toBe("NOT_FOUND");
-    expect(JSON.stringify(response.body)).not.toContain("valid-token");
+    expect(JSON.stringify(response.body)).not.toContain("valid-jwt");
   });
 
   it("rejects cross-origin cookie-authenticated mutations", async () => {
     const app = createSecurityTestApp(
-      async () => ({ id: "user-1", email: "u@example.com" }),
+      () => ({ id: "user-1", email: "u@example.com" }),
       async () => true,
     );
     await request(app)
       .post("/api/v1/workspaces/00000000-0000-4000-8000-000000000001/action")
       .set("Origin", "https://attacker.example")
-      .set("Cookie", "session=valid-token")
+      .set("Cookie", "flowpilot_access=valid-jwt")
       .expect(403);
   });
 
-  it("hashes opaque session credentials before database lookup", async () => {
-    const resolver = vi.fn(async () => null);
-    const app = createSecurityTestApp(resolver, async () => true);
+  it("passes the access JWT cookie directly to the verifier", async () => {
+    const verifier = vi.fn(() => null);
+    const app = createSecurityTestApp(verifier, async () => true);
     await request(app)
       .post("/api/v1/workspaces/00000000-0000-4000-8000-000000000001/action")
       .set("Origin", "http://localhost:3000")
-      .set("Cookie", "session=opaque-token")
+      .set("Cookie", "flowpilot_access=jwt.payload.sig")
       .expect(401);
 
-    expect(hashSessionToken("opaque-token")).not.toBe("opaque-token");
-    expect(resolver).toHaveBeenCalledWith(hashSessionToken("opaque-token"));
+    expect(verifier).toHaveBeenCalledWith("jwt.payload.sig");
   });
 
-  it("sets session cookies with restrictive defaults", () => {
-    expect(sessionCookieOptions(true)).toMatchObject({
+  it("uses __Host- prefixes in production and restrictive cookie defaults", () => {
+    expect(getAuthCookieNames(true)).toEqual({
+      accessCookieName: "__Host-flowpilot_access",
+      refreshCookieName: "__Host-flowpilot_refresh",
+    });
+    expect(getAuthCookieNames(false)).toEqual({
+      accessCookieName: "flowpilot_access",
+      refreshCookieName: "flowpilot_refresh",
+    });
+    expect(authCookieOptions(true, 900)).toEqual({
       httpOnly: true,
       secure: true,
       sameSite: "lax",
       path: "/",
+      maxAge: 900_000,
     });
   });
 });

@@ -47,8 +47,10 @@ function toExecutionDto(execution: {
 
 export function createExecutionService(
   repository: ExecutionRepository,
+  history: Pick<ExecutionService, "list" | "get" | "retry">,
 ): ExecutionService {
   return {
+    ...history,
     async start(
       userId,
       workspaceId,

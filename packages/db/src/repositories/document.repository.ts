@@ -183,18 +183,20 @@ export function createDocumentRepository(client: PrismaClient) {
               workspaceId: context.workspaceId,
               executionId: approval.executionId,
               eventType: "approval.cancelled",
-              safeDetails: { reason: "DOCUMENT_REMOVED" },
+              safeDetails: { state: "cancelled", errorCode: "DOCUMENT_REMOVED" },
             },
           });
         }
 
-        await transaction.approval.updateMany({
-          where: {
-            workspaceId: context.workspaceId,
-            id: { in: affectedApprovals.map((approval) => approval.id) },
-          },
-          data: { status: "cancelled", decidedAt: new Date() },
-        });
+        if (affectedApprovals.length > 0) {
+          await transaction.approval.updateMany({
+            where: {
+              workspaceId: context.workspaceId,
+              id: { in: affectedApprovals.map((approval) => approval.id) },
+            },
+            data: { status: "cancelled", decidedAt: new Date() },
+          });
+        }
         await transaction.pendingReport.deleteMany({
           where: {
             workspaceId: context.workspaceId,
@@ -204,18 +206,20 @@ export function createDocumentRepository(client: PrismaClient) {
             ],
           },
         });
-        await transaction.approval.deleteMany({
-          where: {
-            workspaceId: context.workspaceId,
-            targetReportId: { in: reportIds },
-          },
-        });
-        await transaction.report.deleteMany({
-          where: {
-            workspaceId: context.workspaceId,
-            sourceDocumentId: documentId,
-          },
-        });
+        if (reportIds.length > 0) {
+          await transaction.approval.deleteMany({
+            where: {
+              workspaceId: context.workspaceId,
+              targetReportId: { in: reportIds },
+            },
+          });
+          await transaction.report.deleteMany({
+            where: {
+              workspaceId: context.workspaceId,
+              sourceDocumentId: documentId,
+            },
+          });
+        }
 
         const activeExecutions = await transaction.execution.findMany({
           where: {
@@ -229,41 +233,43 @@ export function createDocumentRepository(client: PrismaClient) {
         const executionIdsToCancel = [
           ...new Set([...activeExecutionIds, ...affectedExecutionIds]),
         ];
-        await transaction.execution.updateMany({
-          where: {
-            workspaceId: context.workspaceId,
-            id: { in: executionIdsToCancel },
-            status: { in: ["queued", "running", "waiting_approval"] },
-          },
-          data: {
-            documentId: null,
-            status: "cancelled",
-            finishedAt: new Date(),
-            errorCode: "DOCUMENT_REMOVED",
-            errorMessage: "The source document was removed.",
-          },
-        });
-        await transaction.executionStep.updateMany({
-          where: {
-            workspaceId: context.workspaceId,
-            executionId: { in: executionIdsToCancel },
-            status: { in: ["pending", "running", "waiting_approval"] },
-          },
-          data: { status: "skipped" },
-        });
-        await transaction.stepAttempt.updateMany({
-          where: {
-            workspaceId: context.workspaceId,
-            executionStep: { executionId: { in: executionIdsToCancel } },
-            status: "running",
-          },
-          data: {
-            status: "failed",
-            finishedAt: new Date(),
-            errorCode: "DOCUMENT_REMOVED",
-            errorMessage: "The source document was removed.",
-          },
-        });
+        if (executionIdsToCancel.length > 0) {
+          await transaction.execution.updateMany({
+            where: {
+              workspaceId: context.workspaceId,
+              id: { in: executionIdsToCancel },
+              status: { in: ["queued", "running", "waiting_approval"] },
+            },
+            data: {
+              documentId: null,
+              status: "cancelled",
+              finishedAt: new Date(),
+              errorCode: "DOCUMENT_REMOVED",
+              errorMessage: "The source document was removed.",
+            },
+          });
+          await transaction.executionStep.updateMany({
+            where: {
+              workspaceId: context.workspaceId,
+              executionId: { in: executionIdsToCancel },
+              status: { in: ["pending", "running", "waiting_approval"] },
+            },
+            data: { status: "skipped" },
+          });
+          await transaction.stepAttempt.updateMany({
+            where: {
+              workspaceId: context.workspaceId,
+              executionStep: { executionId: { in: executionIdsToCancel } },
+              status: "running",
+            },
+            data: {
+              status: "failed",
+              finishedAt: new Date(),
+              errorCode: "DOCUMENT_REMOVED",
+              errorMessage: "The source document was removed.",
+            },
+          });
+        }
         await transaction.execution.updateMany({
           where: {
             workspaceId: context.workspaceId,

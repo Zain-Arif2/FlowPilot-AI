@@ -22,19 +22,21 @@ packages; Node.js 24 LTS.
 
 **Primary Dependencies**: Next.js App Router, Express.js, Prisma, Zod,
 `@xyflow/react`, `pdfjs-dist`, Mammoth, OpenRouter API, BullMQ, Redis, Vitest,
-Supertest, Docker Compose.
+and Supertest.
 
 **Storage**: Neon PostgreSQL for application data; Redis for BullMQ; private
 S3-compatible object storage for source documents and derived extracted text.
-Use local PostgreSQL, Redis, and MinIO for development and integration tests.
+Use separately provisioned non-production hosted services for integration
+tests; never use production resources for test runs.
 
-**Testing**: Vitest unit tests, Supertest API tests, PostgreSQL/Redis/MinIO
+**Testing**: Vitest unit tests, Supertest API tests, PostgreSQL/Redis/S3
 integration tests, strict TypeScript checking, and the acceptance walkthrough
 in [quickstart.md](./quickstart.md).
 
-**Target Platform**: Browser client plus containerized Node.js web, API, and
-worker processes. Production hosting and object-store vendor are deployment
-choices; Neon is the hosted PostgreSQL service.
+**Target Platform**: Browser client plus separately run Node.js web, API, and
+worker processes using npm scripts. The application does not require Docker.
+Production hosting and object-store vendor are deployment choices; Neon is the
+hosted PostgreSQL service.
 
 **Project Type**: TypeScript monorepo web application: frontend, REST API,
 background worker, and shared contracts/database packages.
@@ -143,7 +145,6 @@ packages/
         └── repositories/
 package.json
 package-lock.json
-compose.yaml
 tsconfig.base.json
 ```
 
@@ -160,7 +161,7 @@ serialized graph is validated again by the API/worker.
 - Next.js renders the authentication/workspace shell and client-side React Flow
   editor. Browser requests use same-origin `/api/v1/*` routing to Express,
   avoiding browser-held database credentials and cross-site session cookies.
-- Express owns the versioned REST API, authentication/session checks,
+- Express owns the versioned REST API, JWT authentication checks,
   workspace authorization, file-upload intents, workflow validation, OpenRouter
   requests, and database transactions. A centralized error mapper returns
   stable error codes and a request ID without stack traces or private payloads.
@@ -242,10 +243,13 @@ serialized graph is validated again by the API/worker.
 - Use one shared Prisma client per long-running API/worker process. Runtime
   services use Neon's pooled endpoint; migrations use the direct endpoint.
   Tenant setting, RLS-protected queries, and writes stay in one transaction.
-- Use Argon2id for passwords and random opaque server-side sessions whose hashes
-  are stored in the database. Cookies are `HttpOnly`, `Secure`, and
-  `SameSite=Lax`; validate origins/CSRF on mutations, rate-limit sign-in and
-  AI endpoints, and return a generic invalid-credentials response.
+- Use Argon2id for passwords and HS256 JWTs stored in `HttpOnly` cookies:
+  short-lived access JWTs (`10`–`15` minutes) and long-lived refresh JWTs
+  (`7`–`30` days) whose SHA-256 hashes and rotation families are persisted in
+  PostgreSQL (`RefreshToken`). Cookies use `HttpOnly`, `Secure` in production
+  with `__Host-` prefixes, and `SameSite=Lax`; validate origins/CSRF on
+  mutations, rate-limit sign-in, refresh, and AI endpoints, and return a generic
+  invalid-credentials response.
 - Keep object storage private. Uploads use random staging keys and short-lived
   URLs; the server verifies signature, byte size, supported type, and page
   count before marking a document ready. Parsing runs in the worker with size,
@@ -259,22 +263,23 @@ serialized graph is validated again by the API/worker.
   before purging document metadata. Worker results arriving after deletion are
   discarded.
 
-### Testing and containerization
+### Testing and hosted runtime
 
 - Vitest unit tests cover workflow graph validation, Zod schemas, branch
   evaluation, safe-retry policy, authorization decisions, and AI response
   parsing using deterministic fixtures.
 - Supertest runs the Express app in-process for authentication, request
   validation, stable errors, owner/workspace checks, and endpoint contracts.
-- Integration tests use PostgreSQL with the same RLS migration, Redis/BullMQ,
-  and MinIO. Verify cross-workspace denial, duplicate job delivery, worker
-  restart recovery, approval pause/resume, safe retry, and document deletion.
+- Integration tests use isolated non-production PostgreSQL with the same RLS
+  migration, Redis/BullMQ, and private S3-compatible storage. Verify
+  cross-workspace denial, duplicate job delivery, worker restart recovery,
+  approval pause/resume, safe retry, and document deletion.
 - A small evaluation set checks OpenRouter output quality and the spec's
   document success criteria; it is opt-in and not part of deterministic unit
   tests.
-- Docker Compose provides local Postgres, Redis, MinIO, and optional app
-  containers. Build separate non-root web/API/worker images from the monorepo;
-  inject secrets at runtime, never as image build arguments.
+- Run web, API, and worker as separate Node.js processes with npm workspace
+  scripts. Supply credentials at runtime through environment variables or a
+  secret manager; do not store credentials in source control.
 
 ## Complexity Tracking
 

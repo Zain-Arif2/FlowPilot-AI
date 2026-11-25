@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../src/config.js";
 import { HttpError } from "../src/errors/api-error.js";
 import { createApp } from "../src/app.js";
-import { hashSessionToken } from "../src/middleware/session.js";
 
 const config = {
   DATABASE_URL: "postgresql://app:pass@localhost:5432/flowpilot",
@@ -18,8 +17,13 @@ const config = {
   OPENROUTER_API_KEY: "local-key",
   OPENROUTER_MODEL: "approved/model",
   OPENROUTER_TIMEOUT_MS: 30_000,
-  SESSION_COOKIE_NAME: "flowpilot_session",
-  SESSION_COOKIE_SECURE: true,
+  JWT_ACCESS_SECRET: "test-access-secret-at-least-32-chars-long",
+  JWT_REFRESH_SECRET: "test-refresh-secret-at-least-32-chars-long",
+  JWT_ISSUER: "flowpilot-api",
+  JWT_AUDIENCE: "flowpilot-web",
+  JWT_ACCESS_TTL_SECONDS: 900,
+  JWT_REFRESH_TTL_SECONDS: 604_800,
+  COOKIE_SECURE: true,
   APP_ORIGIN: "https://flowpilot.example",
   API_PORT: 3001,
   API_BODY_LIMIT: "1mb",
@@ -57,9 +61,9 @@ const approval = {
 };
 
 function createTestApp() {
-  const usersByTokenHash = new Map([
-    [hashSessionToken("owner-session"), owner],
-    [hashSessionToken("other-session"), otherUser],
+  const usersByToken = new Map([
+    ["owner-session", owner],
+    ["other-session", otherUser],
   ]);
   const workspaceOwners = new Map([
     [workspaceId, owner.id],
@@ -87,15 +91,18 @@ function createTestApp() {
   const app = createApp(config, {
     auth: {
       async register() {
-        return { user: owner, sessionToken: "owner-session" };
+        return { user: owner, accessToken: "owner-session", refreshToken: "owner-refresh" };
       },
       async login() {
-        return { user: owner, sessionToken: "owner-session" };
+        return { user: owner, accessToken: "owner-session", refreshToken: "owner-refresh" };
       },
-      async resolveSession(tokenHash: string) {
-        return usersByTokenHash.get(tokenHash) ?? null;
+      async refresh() {
+        return { user: owner, accessToken: "owner-session", refreshToken: "owner-refresh" };
       },
-      async revokeSession() {},
+      verifyAccessToken(token: string) {
+        return usersByToken.get(token) ?? null;
+      },
+      async logout() {},
     },
     workspaces: {
       async list() {
@@ -121,14 +128,14 @@ describe("approval API contract", () => {
     const { app } = createTestApp();
     const list = await request(app)
       .get(`/api/v1/workspaces/${workspaceId}/approvals`)
-      .set("Cookie", "flowpilot_session=owner-session")
+      .set("Cookie", "__Host-flowpilot_access=owner-session")
       .expect(200);
     expect(list.body).toEqual([approval]);
     expect(JSON.stringify(list.body)).not.toContain("Sign the contract.");
 
     const detail = await request(app)
       .get(`/api/v1/workspaces/${workspaceId}/approvals/${approvalId}`)
-      .set("Cookie", "flowpilot_session=owner-session")
+      .set("Cookie", "__Host-flowpilot_access=owner-session")
       .expect(200);
     expect(detail.body).toMatchObject({
       ...approval,
@@ -140,7 +147,7 @@ describe("approval API contract", () => {
     const { app } = createTestApp();
     const response = await request(app)
       .post(`/api/v1/workspaces/${workspaceId}/approvals/${approvalId}/decision`)
-      .set("Cookie", "flowpilot_session=owner-session")
+      .set("Cookie", "__Host-flowpilot_access=owner-session")
       .set("Origin", config.APP_ORIGIN)
       .send({ decision: "approved" })
       .expect(200);
@@ -159,7 +166,7 @@ describe("approval API contract", () => {
     const get = vi.spyOn(approvals, "get");
     const response = await request(app)
       .get(`/api/v1/workspaces/${workspaceId}/approvals/${approvalId}`)
-      .set("Cookie", "flowpilot_session=other-session")
+      .set("Cookie", "__Host-flowpilot_access=other-session")
       .expect(404);
 
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -173,7 +180,7 @@ describe("approval API contract", () => {
     for (const decision of ["approved", "rejected"] as const) {
       const response = await request(app)
         .post(`/api/v1/workspaces/${workspaceId}/approvals/${approvalId}/decision`)
-        .set("Cookie", "flowpilot_session=other-session")
+        .set("Cookie", "__Host-flowpilot_access=other-session")
         .set("Origin", config.APP_ORIGIN)
         .send({ decision })
         .expect(404);
@@ -189,7 +196,7 @@ describe("approval API contract", () => {
     const list = vi.spyOn(approvals, "list");
     const response = await request(app)
       .get(`/api/v1/workspaces/${workspaceId}/approvals`)
-      .set("Cookie", "flowpilot_session=other-session")
+      .set("Cookie", "__Host-flowpilot_access=other-session")
       .expect(404);
 
     expect(response.body.error.code).toBe("NOT_FOUND");
@@ -204,7 +211,7 @@ describe("approval API contract", () => {
     );
     const response = await request(app)
       .post(`/api/v1/workspaces/${workspaceId}/approvals/${approvalId}/decision`)
-      .set("Cookie", "flowpilot_session=owner-session")
+      .set("Cookie", "__Host-flowpilot_access=owner-session")
       .set("Origin", config.APP_ORIGIN)
       .send({ decision: "approved" })
       .expect(409);

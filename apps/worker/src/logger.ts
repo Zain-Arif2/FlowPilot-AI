@@ -1,22 +1,32 @@
 import pino from "pino";
 
-export const workerLogger = pino({
-  level: process.env.LOG_LEVEL ?? "info",
-  redact: {
-    paths: [
-      "password",
-      "passwordHash",
-      "token",
-      "tokenHash",
-      "apiKey",
-      "prompt",
-      "documentText",
-      "reportContent",
-      "OPENROUTER_API_KEY",
-    ],
-    censor: "[REDACTED]",
-  },
-});
+export function createWorkerLogger(destination?: pino.DestinationStream) {
+  return pino(
+    {
+      level: process.env.LOG_LEVEL ?? "info",
+      redact: {
+        paths: [
+          "req.headers.authorization",
+          "req.headers.cookie",
+          "req.headers['set-cookie']",
+          "password",
+          "passwordHash",
+          "token",
+          "tokenHash",
+          "apiKey",
+          "prompt",
+          "documentText",
+          "reportContent",
+          "OPENROUTER_API_KEY",
+        ],
+        censor: "[REDACTED]",
+      },
+    },
+    destination,
+  );
+}
+
+export const workerLogger = createWorkerLogger();
 
 export interface SafeExecutionLogFields {
   readonly requestId?: string;

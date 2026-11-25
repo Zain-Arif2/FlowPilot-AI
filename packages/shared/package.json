@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./ai/openrouter": "./src/ai/openrouter.ts",
     "./api": "./src/api/index.ts",
+    "./redis": "./src/redis/index.ts",
     "./schemas": "./src/schemas/index.ts",
     "./workflow": "./src/workflow/index.ts"
   },

@@ -87,11 +87,10 @@ adapting an existing codebase.
 ### Document storage and removal
 
 - **Decision**: Keep source documents and derived extracted text in a private
-  S3-compatible object store. Use MinIO in local Docker Compose; choose the
-  production provider during environment provisioning. Issue short-lived,
-  object-specific upload/download URLs only after workspace authorization.
-  Use random immutable object keys, verify uploaded size/type and parse results
-  server-side, and never trust the browser's filename or MIME type.
+  hosted S3-compatible object store. Issue short-lived, object-specific
+  upload/download URLs only after workspace authorization. Use random immutable
+  object keys, verify uploaded size/type and parse results server-side, and
+  never trust the browser's filename or MIME type.
 - **Rationale**: Object storage avoids putting large binary files in Neon and
   keeps file delivery independent from API process memory. AWS documents that
   presigned URLs grant the permissions of their creator and can replace an
@@ -102,7 +101,7 @@ adapting an existing codebase.
   objects through a retryable outbox event. Preserve only content-free run
   status and error metadata as required by the spec.
 - **Alternatives considered**: Storing binary data in PostgreSQL or local
-  container files couples storage to database/instance size and is not suitable
+  disk files couples storage to database/instance size and is not suitable
   for horizontal workers.
 - **Sources**: [S3 presigned uploads](https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html)
   and [S3 Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html).
@@ -201,10 +200,10 @@ adapting an existing codebase.
   checks, and an `Idempotency-Key` for run creation.
 - **Testing**: Vitest covers pure schemas, graph validation, state transitions,
   and tool policy. Supertest exercises the Express app and auth/error contract.
-  Docker Compose supplies PostgreSQL, Redis, and MinIO for integration tests.
-  AI responses are deterministic fixtures in tests; a small opt-in evaluation
-  set measures model output quality without making unit tests depend on a live
-  provider.
+  Integration tests use separately provisioned non-production PostgreSQL,
+  Redis, and S3-compatible resources. AI responses are deterministic fixtures
+  in tests; a small opt-in evaluation set measures model output quality
+  without making unit tests depend on a live provider.
 - **Rationale**: React Flow models nodes and edges for interactive graph
   editing; Zod validates untrusted runtime values and infers TypeScript types.
   Vitest supports the TypeScript test workflow and Supertest exercises Node
@@ -213,7 +212,7 @@ adapting an existing codebase.
   [Next.js rewrites](https://nextjs.org/docs/app/api-reference/config/next-config-js/rewrites),
   [Zod](https://zod.dev/), [Vitest](https://vitest.dev/guide/),
   [Supertest](https://github.com/forwardemail/supertest#readme),
-  and [Docker Compose quickstart](https://docs.docker.com/compose/gettingstarted/).
+  and [npm workspaces](https://docs.npmjs.com/cli/using-npm/workspaces).
 
 ## Explicit MVP Boundaries
 

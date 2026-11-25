@@ -9,16 +9,26 @@ info:
 servers:
   - url: /api/v1
 security:
-  - SessionCookie: []
+  - AccessTokenCookie: []
 paths:
   /healthz:
     get:
       operationId: healthCheck
       security: []
-      summary: Check API readiness
+      summary: Check API liveness
       responses:
         '200':
-          description: API is ready to accept requests
+          description: API process is alive
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /readyz:
+    get:
+      operationId: readinessCheck
+      security: []
+      summary: Check API dependency readiness
+      responses:
+        '200':
+          description: Database and Redis dependencies are available
         '503':
           $ref: '#/components/responses/Unavailable'
   /auth/register:
@@ -47,6 +57,10 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/InvalidInput'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /auth/login:
     post:
       operationId: login
@@ -71,15 +85,41 @@ paths:
                 $ref: '#/components/schemas/User'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /auth/refresh:
+    post:
+      operationId: refreshAuth
+      security:
+        - RefreshTokenCookie: []
+      summary: Rotate refresh JWT and issue fresh access/refresh HttpOnly cookies
+      responses:
+        '200':
+          description: Tokens rotated and refreshed
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /auth/logout:
     post:
       operationId: logout
-      summary: Revoke the current session
+      security: []
+      summary: Revoke refresh token family and clear auth cookies
       responses:
         '204':
-          description: Session revoked and cookie cleared
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: Refresh token revoked and auth cookies cleared
   /auth/me:
     get:
       operationId: getCurrentUser
@@ -193,6 +233,10 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/InvalidInput'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /workspaces/{workspaceId}/documents/{documentId}/complete:
     parameters:
       - $ref: '#/components/parameters/WorkspaceId'
@@ -242,6 +286,8 @@ paths:
                 $ref: '#/components/schemas/WorkflowProposal'
         '422':
           $ref: '#/components/responses/InvalidInput'
+        '429':
+          $ref: '#/components/responses/RateLimited'
         '503':
           $ref: '#/components/responses/Unavailable'
   /workspaces/{workspaceId}/workflows:
@@ -318,6 +364,10 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/InvalidInput'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
     get:
       operationId: getWorkflow
       summary: Get a saved workflow and its current revision
@@ -442,6 +492,10 @@ paths:
       responses:
         '202':
           description: Safe retry queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':
@@ -584,10 +638,14 @@ paths:
           $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
-    SessionCookie:
+    AccessTokenCookie:
       type: apiKey
       in: cookie
-      name: __Host-flowpilot_session
+      name: __Host-flowpilot_access
+    RefreshTokenCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-flowpilot_refresh
   parameters:
     WorkspaceId:
       name: workspaceId
@@ -636,6 +694,25 @@ components:
             $ref: '#/components/schemas/ApiError'
     Unavailable:
       description: AI provider or required service is unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    RateLimited:
+      description: Request rate limit exceeded
+      headers:
+        RateLimit-Limit:
+          schema:
+            type: integer
+            minimum: 1
+        RateLimit-Remaining:
+          schema:
+            type: integer
+            minimum: 0
+        Retry-After:
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/json:
           schema:
@@ -994,19 +1071,78 @@ components:
         createdAt:
           type: string
           format: date-time
+        errorCode:
+          type: string
         steps:
           type: array
           items:
             type: object
+            additionalProperties: false
             required: [stepId, status]
             properties:
               stepId:
                 type: string
+              actionType:
+                type: string
+                enum: [extract_document, analyze_document, create_report, replace_report, condition]
               status:
                 type: string
                 enum: [pending, running, waiting_approval, succeeded, failed, skipped]
               errorCode:
                 type: string
+              attempts:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [attemptNumber, status, startedAt]
+                  properties:
+                    attemptNumber:
+                      type: integer
+                      minimum: 1
+                    status:
+                      type: string
+                      enum: [running, succeeded, failed]
+                    startedAt:
+                      type: string
+                      format: date-time
+                    finishedAt:
+                      type: string
+                      format: date-time
+                    errorCode:
+                      type: string
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [eventType, details, createdAt]
+            properties:
+              eventType:
+                type: string
+                minLength: 1
+                maxLength: 64
+              stepId:
+                type: string
+              details:
+                type: object
+                additionalProperties: false
+                properties:
+                  state:
+                    type: string
+                    pattern: '^[a-z_]{1,64}$'
+                  errorCode:
+                    type: string
+                    pattern: '^[A-Z0-9_]{1,64}$'
+                  attemptNumber:
+                    type: integer
+                    minimum: 0
+                  elapsedMs:
+                    type: integer
+                    minimum: 0
+              createdAt:
+                type: string
+                format: date-time
     Approval:
       type: object
       additionalProperties: false

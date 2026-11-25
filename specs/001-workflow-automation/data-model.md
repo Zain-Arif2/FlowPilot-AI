@@ -13,7 +13,7 @@
 - Persist workflow definitions and execution snapshots as versioned JSON, but
   validate both with the shared Zod schema before use.
 - Logs, queue payloads, and step output metadata MUST NOT contain document text,
-  report content, passwords, session tokens, or provider secrets.
+  report content, passwords, JWTs, refresh tokens, or provider secrets.
 
 ## Entities
 
@@ -26,16 +26,18 @@
 | `passwordHash` | text | Argon2id hash; never return in API responses |
 | `createdAt`, `updatedAt` | timestamptz | Audit timestamps |
 
-### Session
+### RefreshToken
 
 | Field | Type | Constraints / purpose |
 |---|---|---|
-| `id` | UUID | Primary key |
+| `id` | UUID | Primary key (`jti` claim of the refresh JWT) |
 | `userId` | UUID | Foreign key to `User` |
-| `tokenHash` | text | Unique hash of opaque cookie token |
-| `expiresAt` | timestamptz | Required |
-| `revokedAt` | timestamptz? | Set on logout/revocation |
-| `createdAt` | timestamptz | Session creation time |
+| `familyId` | UUID | Rotation family identifier; all tokens in the family are revoked on reuse detection |
+| `tokenHash` | text | Unique SHA-256 hash of the refresh JWT |
+| `expiresAt` | timestamptz | Required (7–30 days) |
+| `revokedAt` | timestamptz? | Set on rotation, logout, or reuse revocation |
+| `replacedBy` | UUID? | Next `RefreshToken.id` in the rotation chain |
+| `createdAt` | timestamptz | Token creation time |
 
 ### Workspace
 

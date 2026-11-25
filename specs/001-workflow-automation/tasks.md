@@ -26,7 +26,7 @@
 - [X] T006 [P] Create the Prisma database package in `packages/db/`
 - [X] T007 Configure strict TypeScript settings, including `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, and an `any`-rejection lint rule in `tsconfig.base.json` and root lint configuration
 - [X] T008 Add root scripts for install, development, typecheck, lint, formatting, unit tests, integration tests, and migrations in `package.json`
-- [X] T009 [P] Add Docker Compose services for PostgreSQL, Redis, and MinIO with environment templates in `compose.yaml` and `.env.example`
+- [X] T009 [P] Document hosted Neon, Upstash, and private S3-compatible service configuration in `.env.example` and `apps/api/src/config.ts`
 - [X] T010 [P] Configure Vitest and Supertest test roots across `apps/*/tests/`, `packages/*/tests/`, and root test configuration
 - [X] T011 [P] Configure Next.js same-origin `/api/v1/*` routing to Express in `apps/web/next.config.ts`
 - [X] T012 Document required local and deployment environment variables in `apps/api/src/config.ts` and `.env.example`
@@ -41,7 +41,7 @@
 
 ### Database and tenant isolation
 
-- [X] T013 Define Prisma models and UUID/tenant relations for `User`, `Session`, `Workspace`, `Document`, `Workflow`, `Execution`, `ExecutionStep`, `StepAttempt`, `ExecutionEvent`, `Report`, `Approval`, `PendingReport`, and `OutboxEvent` in `packages/db/prisma/schema.prisma`, using constraints from [data-model.md](./data-model.md)
+- [X] T013 Define Prisma models and UUID/tenant relations for `User`, `RefreshToken`, `Workspace`, `Document`, `Workflow`, `Execution`, `ExecutionStep`, `StepAttempt`, `ExecutionEvent`, `Report`, `Approval`, `PendingReport`, and `OutboxEvent` in `packages/db/prisma/schema.prisma`, using constraints from [data-model.md](./data-model.md)
 - [X] T014 Create the initial reviewed migration and migration-only role setup in `packages/db/prisma/migrations/`
 - [X] T015 Add PostgreSQL RLS policies with default-deny tenant context for every workspace-owned table in `packages/db/prisma/migrations/`
 - [X] T016 Implement the runtime Prisma client and direct/migration connection separation in `packages/db/src/client.ts`
@@ -51,12 +51,12 @@
 
 ### Shared contracts and API foundation
 
-- [X] T020 Create shared Zod schemas for API errors, IDs, session credentials, and workspace/document/workflow/report contracts in `packages/shared/src/schemas/`
+- [X] T020 Create shared Zod schemas for API errors, IDs, auth credentials, and workspace/document/workflow/report contracts in `packages/shared/src/schemas/`
 - [X] T021 Create shared workflow graph Zod types and semantic validators for DAG bounds and conditions in `packages/shared/src/workflow/`
 - [X] T022 Create stable API error/request contracts and inferred types in `packages/shared/src/api/`
 - [X] T023 [P] Add unit tests for Zod schemas and workflow graph validation in `packages/shared/tests/`
 - [X] T024 Implement Express application setup, same-origin routing, JSON limits, centralized errors, and request IDs in `apps/api/src/app.ts` and `apps/api/src/middleware/error.ts`
-- [X] T025 Implement session authentication middleware, secure cookie configuration, origin/CSRF checks, and workspace owner lookup in `apps/api/src/middleware/`
+- [X] T025 Implement JWT authentication middleware, secure `__Host-` / `HttpOnly` cookie configuration, origin/CSRF checks, and workspace owner lookup in `apps/api/src/middleware/`
 - [X] T026 Implement workspace authorization middleware that sets and verifies tenant context inside a Prisma transaction in `apps/api/src/middleware/workspace.ts`
 - [X] T027 [P] Add API security tests for generic errors, unauthenticated access, unauthorized workspace access, CSRF, and missing tenant context in `apps/api/tests/security.test.ts`
 - [X] T028 Implement private S3-compatible object-store client and short-lived signed upload/download URLs in `apps/api/src/adapters/object-storage.ts`
@@ -87,21 +87,21 @@
 ### Tests for User Story 2
 
 - [X] T064 [P] [US2] Add Supertest authentication and workspace contract tests in `apps/api/tests/auth-workspaces.contract.test.ts`
-- [ ] T065 [P] [US2] Add cross-workspace integration tests for every document/workflow/execution/report/approval endpoint in `apps/api/tests/workspace-isolation.test.ts`
-- [ ] T066 [P] [US2] Add document-removal integration tests proving source/report/pending content and private execution artifacts are deleted and only content-free metadata remains in `apps/api/tests/document-deletion.test.ts`
+- [X] T065 [P] [US2] Add cross-workspace integration tests for every document/workflow/execution/report/approval endpoint in `apps/api/tests/workspace-isolation.test.ts`
+- [X] T066 [P] [US2] Add document-removal integration tests proving source/report/pending content and private execution artifacts are deleted and only content-free metadata remains in `apps/api/tests/document-deletion.test.ts`
 
 ### Implementation for User Story 2
 
-- [X] T067 [P] [US2] Implement `User`, `Session`, password hashing, and opaque session repositories in `packages/db/src/repositories/auth.repository.ts`, using the constraints in [data-model.md](./data-model.md): `User.email`, `User.passwordHash`, `Session.tokenHash`
+- [X] T067 [P] [US2] Implement `User`, `RefreshToken` rotation/revocation, and password hashing repositories in `packages/db/src/repositories/auth.repository.ts`, using the constraints in [data-model.md](./data-model.md): `User.email`, `User.passwordHash`, `RefreshToken.tokenHash`
 - [X] T068 [P] [US2] Implement creator-owned workspace repositories with `(ownerId, createdAt)` lookup and rename behavior in `packages/db/src/repositories/workspace.repository.ts`, citing [data-model.md](./data-model.md): `Workspace.ownerId`, `Workspace.name`
-- [X] T069 [US2] Implement Argon2id registration and login, generic invalid-credential responses, and session creation in `apps/api/src/modules/auth/`
-- [X] T070 [US2] Implement logout, current-user lookup, session revocation, and secure cookie clearing in `apps/api/src/modules/auth/`
+- [X] T069 [US2] Implement Argon2id registration and login, generic invalid-credential responses, and JWT access/refresh cookie issuance in `apps/api/src/modules/auth/`
+- [X] T070 [US2] Implement refresh-token rotation with reuse detection, logout family revocation, current-user lookup, and secure cookie clearing in `apps/api/src/modules/auth/`
 - [X] T071 [US2] Implement workspace list/create/rename endpoints in `apps/api/src/modules/workspaces/`
 - [X] T072 [US2] Enforce owner-only access in every workspace-scoped route and repository call in `apps/api/src/modules/`
 - [X] T073 [US2] Implement immediate document removal state, report/pending approval cancellation, private execution-artifact cleanup outbox event, and execution reference detachment in `apps/api/src/modules/documents/deletion.ts`
 - [X] T074 [US2] Implement document delete endpoint `DELETE /workspaces/{workspaceId}/documents/{documentId}` in `apps/api/src/modules/documents/`
 - [X] T075 [P] [US2] Build registration, login, logout, workspace selection, and workspace rename UI in `apps/web/src/features/auth/` and `apps/web/src/features/workspaces/`
-- [ ] T076 [US2] Verify browser navigation and API calls never expose or request resources outside the selected creator-owned workspace in `apps/web/src/features/workspaces/`
+- [X] T076 [US2] Verify browser navigation and API calls never expose or request resources outside the selected creator-owned workspace in `apps/web/src/features/workspaces/`
 
 **Checkpoint**: User Story 2 provides isolated authentication/workspace management and scoped document deletion.
 
@@ -115,10 +115,10 @@
 
 ### Tests for User Story 1
 
-- [ ] T039 [P] [US1] Add Supertest contract tests for document upload, proposal, workflow creation, execution, and report endpoints in `apps/api/tests/document-workflow.contract.test.ts`
+- [X] T039 [P] [US1] Add Supertest contract tests for document upload, proposal, workflow creation, execution, and report endpoints in `apps/api/tests/document-workflow.contract.test.ts`
 - [X] T040 [P] [US1] Add integration tests for PDF/DOCX/TXT parsing limits and invalid/corrupt uploads in `apps/worker/tests/document-processing.test.ts`
-- [ ] T041 [P] [US1] Add integration tests for proposal validation and one bounded repair attempt in `apps/api/tests/workflow-proposal.test.ts`
-- [ ] T042 [P] [US1] Add end-to-end worker/API tests for document extraction, analysis, report creation, idempotent execution, and restart recovery from persisted step artifacts in `apps/worker/tests/document-e2e.test.ts`
+- [X] T041 [P] [US1] Add integration tests for proposal validation and one bounded repair attempt in `apps/api/tests/workflow-proposal.test.ts`
+- [X] T042 [P] [US1] Add end-to-end worker/API tests for document extraction, analysis, report creation, idempotent execution, and restart recovery from persisted step artifacts in `apps/worker/tests/document-e2e.test.ts`
 
 ### Implementation for User Story 1
 
@@ -154,19 +154,19 @@
 
 ### Tests for User Story 3
 
-- [ ] T077 [P] [US3] Add unit tests for node/edge editing invariants and condition branch serialization in `packages/shared/tests/workflow-builder.test.ts`
-- [ ] T078 [P] [US3] Add integration tests for stale workflow revisions and save/run rejection of malformed graphs in `apps/api/tests/workflows.contract.test.ts`
-- [ ] T079 [P] [US3] Add worker tests proving exactly the true or false branch executes for fixed condition results in `apps/worker/tests/condition.test.ts`
+- [X] T077 [P] [US3] Add unit tests for node/edge editing invariants and condition branch serialization in `packages/shared/tests/workflow-builder.test.ts`
+- [X] T078 [P] [US3] Add integration tests for stale workflow revisions and save/run rejection of malformed graphs in `apps/api/tests/workflows.contract.test.ts`
+- [X] T079 [P] [US3] Add worker tests proving exactly the true or false branch executes for fixed condition results in `apps/worker/tests/condition.test.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T080 [P] [US3] Implement React Flow canvas nodes for approved action types and fixed condition types in `apps/web/src/features/workflow-builder/nodes/`
-- [ ] T081 [P] [US3] Implement edge rendering and true/false branch controls in `apps/web/src/features/workflow-builder/edges/`
-- [ ] T082 [P] [US3] Implement visual add/remove/reorder and typed configuration controls in `apps/web/src/features/workflow-builder/`
-- [ ] T083 [US3] Implement client-side graph validation and actionable save/run feedback in `apps/web/src/features/workflow-builder/validation.ts`
-- [ ] T084 [US3] Implement workflow list/get/save/update UI against the OpenAPI contracts in `apps/web/src/features/workflows/`
-- [ ] T085 [US3] Implement `If-Match` expected-revision handling and stale-edit conflict feedback in `apps/api/src/modules/workflows/update.ts`
-- [ ] T086 [US3] Extend workflow save/run validation to reject unresolved edges, cycles, unreachable nodes, ambiguous conditions, and unsupported fields in `packages/shared/src/workflow/validate.ts`
+- [X] T080 [P] [US3] Implement React Flow canvas nodes for approved action types and fixed condition types in `apps/web/src/features/workflow-builder/nodes/`
+- [X] T081 [P] [US3] Implement edge rendering and true/false branch controls in `apps/web/src/features/workflow-builder/edges/`
+- [X] T082 [P] [US3] Implement visual add/remove/reorder and typed configuration controls in `apps/web/src/features/workflow-builder/`
+- [X] T083 [US3] Implement client-side graph validation and actionable save/run feedback in `apps/web/src/features/workflow-builder/validation.ts`
+- [X] T084 [US3] Implement workflow list/get/save/update UI against the OpenAPI contracts in `apps/web/src/features/workflows/`
+- [X] T085 [US3] Implement `If-Match` expected-revision handling and stale-edit conflict feedback in `apps/api/src/modules/workflows/update.ts`
+- [X] T086 [US3] Extend workflow save/run validation to reject unresolved edges, cycles, unreachable nodes, ambiguous conditions, and unsupported fields in `packages/shared/src/workflow/validate.ts`
 
 **Checkpoint**: User Story 3 provides a saved, reusable, visually editable and condition-capable workflow DAG.
 
@@ -181,22 +181,22 @@
 ### Tests for User Story 4
 
 - [X] T087 [P] [US4] Add Supertest contract tests for approval detail retrieval, required action/report/workspace/revision/content fields, list responses without content, and decision responses in `apps/api/tests/approvals-executions.contract.test.ts`
-- [ ] T088 [P] [US4] Add integration tests for approval pause, approval replacement, rejection without replacement, and stale revision conflict cancelling the approval/execution while leaving the report unchanged in `apps/worker/tests/approval.test.ts`
-- [ ] T089 [P] [US4] Add integration tests for safe retry, completed-step skipping, and terminal permanent errors in `apps/worker/tests/retry.test.ts`
+- [X] T088 [P] [US4] Add integration tests for approval pause, approval replacement, rejection without replacement, and stale revision conflict cancelling the approval/execution while leaving the report unchanged in `apps/worker/tests/approval.test.ts`
+- [X] T089 [P] [US4] Add integration tests for safe retry, completed-step skipping, and terminal permanent errors in `apps/worker/tests/retry.test.ts`
 - [X] T090 [P] [US4] Add security tests proving only the owning workspace owner can list/retrieve approval details or approve/reject, and unauthorized requests reveal no approval or proposed content, in `apps/api/tests/approvals-executions.contract.test.ts`
 
 ### Implementation for User Story 4
 
-- [ ] T091 [P] [US4] Implement execution/step/event list repositories in `packages/db/src/repositories/execution-history.repository.ts`
+- [X] T091 [P] [US4] Implement execution/step/event list repositories in `packages/db/src/repositories/execution-history.repository.ts`
 - [X] T092 [P] [US4] Implement approval repositories for immutable action/workspace/report/revision scope, owner-scoped detail reads, linked pending content, and one-time status transitions in `packages/db/src/repositories/approval.repository.ts`
-- [ ] T093 [US4] Implement execution list/get and step/event detail endpoints in `apps/api/src/modules/executions/history.ts`
-- [ ] T094 [US4] Implement eligible step retry creation and completed-step skip behavior in `apps/api/src/modules/executions/retry.ts`
+- [X] T093 [US4] Implement execution list/get and step/event detail endpoints in `apps/api/src/modules/executions/history.ts`
+- [X] T094 [US4] Implement eligible step retry creation and completed-step skip behavior in `apps/api/src/modules/executions/retry.ts`
 - [X] T095 [US4] Implement owner-authorized approval list summaries and `GET /workspaces/{workspaceId}/approvals/{approvalId}` detail retrieval returning action type, workspace ID, target report ID, expected revision, and proposed content only while pending in `apps/api/src/modules/approvals/`
 - [X] T096 [US4] Implement owner-only approve/reject decisions in one transaction; compare the current report revision with both stored expected revisions before replacement, return conflict and cancel approval/execution on stale revision without changing the report, and discard proposed content on rejection in `packages/db/src/repositories/approval.repository.ts` and `apps/api/src/modules/approvals/`
 - [X] T097 [US4] Implement approval continuation and rejection/stale-revision cancellation outbox events; stop execution on rejection or stale revision in `packages/db/src/repositories/approval.repository.ts` and `apps/worker/src/outbox/processor.ts`
-- [ ] T098 [P] [US4] Build execution history and step-detail UI in `apps/web/src/features/executions/`
+- [X] T098 [P] [US4] Build execution history and step-detail UI in `apps/web/src/features/executions/`
 - [X] T099 [P] [US4] Build owner-only approval detail UI showing action type, workspace, target report, expected revision, and pending proposed content, with approve/reject and stale/rejected states in `apps/web/src/features/documents/document-workflow-panel.tsx`
-- [ ] T100 [US4] Build safe retry controls that explain permanent/non-repeatable failure conditions in `apps/web/src/features/executions/retry.tsx`
+- [X] T100 [US4] Build safe retry controls that explain permanent/non-repeatable failure conditions in `apps/web/src/features/executions/retry.tsx`
 
 **Checkpoint**: User Story 4 exposes trustworthy run, error, retry, and approval behavior.
 
@@ -206,16 +206,16 @@
 
 **Purpose**: Complete quality, security, performance, deployment, and final acceptance validation.
 
-- [ ] T101 [P] Add Docker production-style images for Next.js, API, and worker with non-root users and runtime-only secrets in `apps/web/Dockerfile`, `apps/api/Dockerfile`, `apps/worker/Dockerfile`
-- [ ] T102 [P] Add container health checks and startup dependency handling in `compose.yaml` and app server entry points
-- [ ] T103 [P] Add rate limits for authentication, workflow proposals, uploads, and AI calls in `apps/api/src/middleware/rate-limit.ts`
-- [ ] T104 [P] Add privacy and redaction checks that reject logs/output containing prompts, document text, report content, credentials, or provider secrets in `apps/api/tests/redaction.test.ts` and `apps/worker/tests/redaction.test.ts`
-- [ ] T105 Run strict typecheck and remove or documented-justify any remaining `any` usage across `apps/` and `packages/`
+- [X] T101 [P] Add npm production start scripts for the Next.js app, API, and worker; keep service credentials external in `apps/web/package.json`, `apps/api/package.json`, and `apps/worker/package.json`
+- [X] T102 [P] Validate API and worker database/Redis dependencies before accepting or processing work, and expose API readiness in `/readyz` and worker startup status in app entry points
+- [X] T103 [P] Add rate limits for authentication, workflow proposals, uploads, and AI calls in `apps/api/src/middleware/rate-limit.ts`
+- [X] T104 [P] Add privacy and redaction checks that reject logs/output containing prompts, document text, report content, credentials, or provider secrets in `apps/api/tests/redaction.test.ts` and `apps/worker/tests/redaction.test.ts`
+- [X] T105 Run strict typecheck and remove or documented-justify any remaining `any` usage across `apps/` and `packages/`
 - [ ] T106 Run the unit and integration suites, inspect coverage for authorization, validation, retry, and deletion, and fix failures in `apps/**/tests/` and `packages/**/tests/`
-- [ ] T107 Run the OpenAPI lint and align stable response schemas with shared Zod contracts in `specs/001-workflow-automation/contracts/openapi.yaml` and `packages/shared/src/schemas/`
+- [X] T107 Run the OpenAPI lint and align stable response schemas with shared Zod contracts in `specs/001-workflow-automation/contracts/openapi.yaml` and `packages/shared/src/schemas/`
 - [ ] T108 Execute the quickstart end-to-end acceptance walkthrough and document exact results in `specs/001-workflow-automation/quickstart.md`
-- [ ] T109 Run synthetic performance validation for 20 MB/100-page documents and 3-minute report target in `apps/worker/tests/performance.test.ts`
-- [ ] T110 Run a final workspace-isolation/security review across database RLS, API middleware, object storage, and worker state in `apps/`, `packages/db/`, and `packages/shared/`
+- [X] T109 Run synthetic performance validation for 20 MB/100-page documents and 3-minute report target in `apps/worker/tests/performance.test.ts`
+- [X] T110 Run a final workspace-isolation/security review across database RLS, API middleware, object storage, and worker state in `apps/`, `packages/db/`, and `packages/shared/`
 
 ---
 

@@ -1,5 +1,6 @@
 import { Queue, QueueEvents, Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
+import { buildRedisClientOptions } from "@flowpilot/shared/redis";
 import {
   OUTBOX_QUEUE,
   OutboxDispatchJobSchema,
@@ -29,7 +30,10 @@ export interface QueueRuntime {
 }
 
 export function createQueueRuntime(redisUrl: string): QueueRuntime {
-  const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
+  const connection = new Redis(
+    redisUrl,
+    buildRedisClientOptions(redisUrl, "bullmq"),
+  );
   const workflowQueue = new Queue<WorkflowExecutionJob>(WORKFLOW_QUEUE, { connection });
   const outboxQueue = new Queue<OutboxDispatchJob>(OUTBOX_QUEUE, { connection });
   const documentQueue = new Queue<DocumentValidationJob>(DOCUMENT_QUEUE, { connection });

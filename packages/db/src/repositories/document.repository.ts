@@ -31,7 +31,12 @@ export function createDocumentRepository(client: PrismaClient) {
       context: TenantContext,
       documentId: string,
       input: DocumentUploadInput,
-      sourceObjectKey: string,
+      source: {
+        readonly publicId: string;
+        readonly resourceType: string;
+        readonly deliveryType: string;
+        readonly format: string;
+      },
     ) {
       return withTenantTransaction(client, context, (transaction) =>
         transaction.document.create({
@@ -42,7 +47,10 @@ export function createDocumentRepository(client: PrismaClient) {
             originalName: input.filename,
             mediaType: toDatabaseMediaType(input.mediaType),
             byteSize: input.byteSize,
-            sourceObjectKey,
+            sourcePublicId: source.publicId,
+            sourceResourceType: source.resourceType,
+            sourceDeliveryType: source.deliveryType,
+            sourceFormat: source.format,
             checksum: null,
           },
         }),
@@ -96,6 +104,52 @@ export function createDocumentRepository(client: PrismaClient) {
       });
     },
 
+    async markRetrying(
+      context: TenantContext,
+      documentId: string,
+    ): Promise<boolean> {
+      return withTenantTransaction(client, context, async (transaction) => {
+        const updated = await transaction.document.updateMany({
+          where: {
+            id: documentId,
+            workspaceId: context.workspaceId,
+            status: DocumentStatus.failed,
+          },
+          data: { status: DocumentStatus.uploading, failureCode: null },
+        });
+        return updated.count === 1;
+      });
+    },
+
+    async markUploaded(
+      context: TenantContext,
+      documentId: string,
+      input: {
+        readonly assetId: string | null;
+        readonly version: number | null;
+        readonly bytes: number;
+        readonly format: string;
+      },
+    ): Promise<boolean> {
+      return withTenantTransaction(client, context, async (transaction) => {
+        const updated = await transaction.document.updateMany({
+          where: {
+            id: documentId,
+            workspaceId: context.workspaceId,
+            status: DocumentStatus.uploading,
+          },
+          data: {
+            sourceAssetId: input.assetId,
+            sourceVersion: input.version,
+            sourceFormat: input.format,
+            sourceUploadedAt: new Date(),
+            failureCode: null,
+          },
+        });
+        return updated.count === 1;
+      });
+    },
+
     async markFailed(
       context: TenantContext,
       documentId: string,
@@ -123,7 +177,12 @@ export function createDocumentRepository(client: PrismaClient) {
         readonly checksum: string;
         readonly pageCount: number | null;
         readonly textCharacterCount: number;
-        readonly textObjectKey: string;
+        readonly text: {
+          readonly publicId: string;
+          readonly resourceType: string;
+          readonly deliveryType: string;
+          readonly format: string;
+        };
       },
     ): Promise<boolean> {
       return withTenantTransaction(client, context, async (transaction) => {
@@ -139,7 +198,10 @@ export function createDocumentRepository(client: PrismaClient) {
             checksum: input.checksum,
             pageCount: input.pageCount,
             textCharacterCount: input.textCharacterCount,
-            textObjectKey: input.textObjectKey,
+            textPublicId: input.text.publicId,
+            textResourceType: input.text.resourceType,
+            textDeliveryType: input.text.deliveryType,
+            textFormat: input.text.format,
           },
         });
         return updated.count === 1;
@@ -304,7 +366,13 @@ export function createDocumentRepository(client: PrismaClient) {
             workspaceId: context.workspaceId,
             sourceDocumentId: documentId,
           },
-          select: { id: true, objectKey: true },
+          select: {
+            id: true,
+            publicId: true,
+            resourceType: true,
+            deliveryType: true,
+            format: true,
+          },
         }),
       );
     },

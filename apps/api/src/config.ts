@@ -6,17 +6,24 @@ const EnvironmentSchema = z
     DATABASE_URL: z.string().url(),
     MIGRATION_URL: z.string().url(),
     REDIS_URL: RedisUrlSchema,
-    OBJECT_STORAGE_ENDPOINT: z.string().url(),
-    OBJECT_STORAGE_REGION: z.string().min(1),
-    OBJECT_STORAGE_BUCKET: z.string().min(1),
-    OBJECT_STORAGE_ACCESS_KEY: z.string().min(1),
-    OBJECT_STORAGE_SECRET_KEY: z.string().min(1),
-    OBJECT_STORAGE_PRESIGN_TTL_SECONDS: z.coerce
+    CLOUDINARY_CLOUD_NAME: z
+      .string()
+      .min(1)
+      .regex(/^[a-zA-Z0-9_-]+$/, "CLOUDINARY_CLOUD_NAME contains invalid characters."),
+    CLOUDINARY_API_KEY: z.string().min(1),
+    CLOUDINARY_API_SECRET: z.string().min(1),
+    CLOUDINARY_SIGNED_URL_TTL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(60)
+      .max(3_600)
+      .default(300),
+    DOCUMENT_MAX_BYTES: z.coerce
       .number()
       .int()
       .min(1)
-      .max(900)
-      .default(300),
+      .max(20_000_000)
+      .default(10_000_000),
     OPENROUTER_API_KEY: z.string().min(1),
     OPENROUTER_MODEL: z.string().min(1),
     OPENROUTER_TIMEOUT_MS: z.coerce

@@ -45,7 +45,7 @@ describe("cleanup processor", () => {
     });
 
     expect(calls).toEqual([
-      `delete:workspaces/${workspaceId}/documents/${aggregateId}/`,
+      `delete:flowpilot/workspaces/${workspaceId}/documents/${aggregateId}/`,
       "purge",
     ]);
   });
@@ -94,8 +94,8 @@ describe("cleanup processor", () => {
       {
         async listForExecution() {
           return [
-            { objectKey: "private/artifact-a" },
-            { objectKey: "private/artifact-b" },
+            { publicId: "private/artifact-a" },
+            { publicId: "private/artifact-b" },
           ];
         },
         async deleteForExecution() {

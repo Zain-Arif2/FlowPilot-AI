@@ -21,7 +21,12 @@ export function createExecutionArtifactRepository(client: PrismaClient) {
         readonly executionId: string;
         readonly executionStepId: string;
         readonly sourceDocumentId: string | null;
-        readonly objectKey: string;
+        readonly asset: {
+          readonly publicId: string;
+          readonly resourceType: string;
+          readonly deliveryType: string;
+          readonly format: string;
+        };
       },
     ) {
       return withTenantTransaction(client, context, (transaction) =>
@@ -34,10 +39,19 @@ export function createExecutionArtifactRepository(client: PrismaClient) {
           },
           create: {
             workspaceId: context.workspaceId,
-            ...input,
+            executionId: input.executionId,
+            executionStepId: input.executionStepId,
+            sourceDocumentId: input.sourceDocumentId,
+            publicId: input.asset.publicId,
+            resourceType: input.asset.resourceType,
+            deliveryType: input.asset.deliveryType,
+            format: input.asset.format,
           },
           update: {
-            objectKey: input.objectKey,
+            publicId: input.asset.publicId,
+            resourceType: input.asset.resourceType,
+            deliveryType: input.asset.deliveryType,
+            format: input.asset.format,
             sourceDocumentId: input.sourceDocumentId,
           },
         }),

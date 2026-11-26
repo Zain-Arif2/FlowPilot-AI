@@ -50,8 +50,8 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
     mediaType: "pdf" | "docx" | "txt";
     byteSize: number;
     status: "validating" | "ready" | "failed";
-    sourceObjectKey: string;
-    textObjectKey: string | null;
+    sourcePublicId: string;
+    textPublicId: string | null;
     checksum: string | null;
     pageCount: number | null;
     textCharacterCount: number | null;
@@ -62,8 +62,8 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
     mediaType: "txt",
     byteSize: Buffer.byteLength(sourceText, "utf8"),
     status: "validating",
-    sourceObjectKey,
-    textObjectKey: null,
+    sourcePublicId: sourceObjectKey,
+    textPublicId: null,
     checksum: null,
     pageCount: null,
     textCharacterCount: null,
@@ -74,7 +74,7 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
     id: string;
     nodeId: string;
     status: string;
-    artifact: { objectKey: string } | null;
+    artifact: { publicId: string } | null;
   }
 
   interface StoredExecution {
@@ -111,6 +111,11 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
         if (key.startsWith(prefix)) objects.delete(key);
       }
     },
+    async uploadAsset(_input) { throw new Error("uploadAsset not used in e2e test"); },
+    async inspectAsset(_ref) { return null; },
+    createSignedDownloadUrl(_ref, _ttl) { return { url: "http://test", expiresAt: new Date() }; },
+    async downloadAsset(_ref, _ttl) { return new Uint8Array(); },
+    async deleteAsset(_ref) {},
   };
 
   const documentRepo = {
@@ -124,7 +129,12 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
         readonly checksum: string;
         readonly pageCount: number | null;
         readonly textCharacterCount: number;
-        readonly textObjectKey: string;
+        readonly text: {
+          readonly publicId: string;
+          readonly resourceType: string;
+          readonly deliveryType: string;
+          readonly format: string;
+        };
       },
     ) {
       if (requestedId !== documentId || documentState.status !== "validating") {
@@ -136,7 +146,7 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
         checksum: input.checksum,
         pageCount: input.pageCount,
         textCharacterCount: input.textCharacterCount,
-        textObjectKey: input.textObjectKey,
+        textPublicId: input.text.publicId,
         failureCode: null,
       };
       return true;
@@ -263,7 +273,7 @@ function createE2EHarness(options: { pauseBeforeReportStep?: boolean } = {}) {
       const step = execution?.steps.find((candidate) => candidate.id === input.executionStepId);
       if (!step) return false;
       step.status = "succeeded";
-      step.artifact = { objectKey: input.objectKey };
+      step.artifact = { publicId: input.asset.publicId };
       return true;
     },
     async createReportReplacementApproval() {
@@ -319,7 +329,7 @@ describe("document workflow end-to-end", () => {
     await harness.validateDocument({ documentId, workspaceId, userId });
     const readyDoc = harness.getDocumentState();
     expect(readyDoc.status).toBe("ready");
-    expect(readyDoc.textObjectKey).toBeTruthy();
+    expect(readyDoc.textPublicId).toBeTruthy();
 
     // 2. Idempotent execution creation with the same idempotency key returns the same run.
     const firstCreate = harness.executionRepo.createIdempotent({
@@ -376,8 +386,8 @@ describe("document workflow end-to-end", () => {
     expect(execution.status).toBe("running");
     expect(execution.steps[0]?.status).toBe("succeeded");
     expect(execution.steps[1]?.status).toBe("succeeded");
-    expect(execution.steps[0]?.artifact?.objectKey).toBeTruthy();
-    expect(execution.steps[1]?.artifact?.objectKey).toBeTruthy();
+    expect(execution.steps[0]?.artifact?.publicId).toBeTruthy();
+    expect(execution.steps[1]?.artifact?.publicId).toBeTruthy();
     expect(execution.steps[2]?.status).toBe("pending");
     expect(harness.reports).toHaveLength(0);
     expect(harness.requestStructuredOutput).toHaveBeenCalledTimes(1);

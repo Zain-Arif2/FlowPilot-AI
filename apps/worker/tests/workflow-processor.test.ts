@@ -42,7 +42,7 @@ function createHarness(definition: WorkflowDefinition) {
     id: testUuid(index + 10),
     nodeId: node.id,
     status: "pending",
-    artifact: null as { objectKey: string } | null,
+    artifact: null as { publicId: string } | null,
   }));
   const attemptCounts = new Map<string, number>();
   const objects = new Map<string, Uint8Array>([
@@ -105,14 +105,14 @@ function createHarness(definition: WorkflowDefinition) {
         const step = steps.find((candidate) => candidate.id === input.executionStepId);
         if (!step) return false;
         step.status = "succeeded";
-        step.artifact = { objectKey: input.objectKey };
+        step.artifact = { publicId: input.asset.publicId };
         return true;
       },
       async createReportReplacementApproval(_context, input) {
         const step = steps.find((candidate) => candidate.id === input.executionStepId);
         if (!step) return null;
         step.status = "waiting_approval";
-        step.artifact = { objectKey: input.objectKey };
+        step.artifact = { publicId: input.asset.publicId };
         executionStatus = "waiting_approval";
         replacementRequest(input);
         return { approvalId: "approval-id" };
@@ -131,7 +131,7 @@ function createHarness(definition: WorkflowDefinition) {
         return {
           id: documentId,
           status: "ready",
-          textObjectKey: "source-text",
+          textPublicId: "source-text",
         };
       },
     },

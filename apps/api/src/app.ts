@@ -82,7 +82,12 @@ export function createApp(
     if (services.documents) {
       api.use(
         "/workspaces",
-        createDocumentRouter(services.documents, services.workspaces, authenticate),
+        createDocumentRouter(
+          services.documents,
+          services.workspaces,
+          authenticate,
+          config,
+        ),
       );
     }
     if (services.workflows) {

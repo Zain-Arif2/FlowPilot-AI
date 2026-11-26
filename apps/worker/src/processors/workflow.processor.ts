@@ -59,7 +59,7 @@ interface WorkerStep {
   readonly id: string;
   readonly nodeId: string;
   readonly status: string;
-  readonly artifact: { readonly objectKey: string } | null;
+  readonly artifact: { readonly publicId: string } | null;
 }
 
 interface WorkerExecution {
@@ -84,7 +84,12 @@ interface ExecutionWorkerRepository {
       readonly executionStepId: string;
       readonly attemptId: string;
       readonly sourceDocumentId: string;
-      readonly objectKey: string;
+      readonly asset: {
+        readonly publicId: string;
+        readonly resourceType: string;
+        readonly deliveryType: string;
+        readonly format: string;
+      };
       readonly elapsedMs: number;
     },
   ): Promise<boolean>;
@@ -97,7 +102,12 @@ interface ExecutionWorkerRepository {
       readonly targetReportId: string;
       readonly sourceDocumentId: string;
       readonly proposedContent: Parameters<ReportRepository["create"]>[1]["content"];
-      readonly objectKey: string;
+      readonly asset: {
+        readonly publicId: string;
+        readonly resourceType: string;
+        readonly deliveryType: string;
+        readonly format: string;
+      };
     },
   ): Promise<unknown | null>;
   failStepAttempt(
@@ -123,7 +133,7 @@ interface ExecutionWorkerRepository {
 interface WorkerDocument {
   readonly id: string;
   readonly status: string;
-  readonly textObjectKey: string | null;
+  readonly textPublicId: string | null;
 }
 
 interface WorkerDocuments {
@@ -360,7 +370,7 @@ export function createWorkflowExecutionProcessor(dependencies: {
       }
 
       const document = await dependencies.documents.findById(tenant, documentId);
-      if (!document || document.status !== "ready" || !document.textObjectKey) {
+      if (!document || document.status !== "ready" || !document.textPublicId) {
         await dependencies.executions.finish(tenant, {
           executionId: execution.id,
           status: "failed",
@@ -380,7 +390,7 @@ export function createWorkflowExecutionProcessor(dependencies: {
         outputs.set(
           step.nodeId,
           parseStepOutput(
-            await dependencies.storage.readObject(step.artifact.objectKey),
+            await dependencies.storage.readObject(step.artifact.publicId),
           ),
         );
         if (step.status === "succeeded") completedNodeIds.add(step.nodeId);
@@ -411,7 +421,7 @@ export function createWorkflowExecutionProcessor(dependencies: {
       });
       if (!attempt) return "stopped";
 
-      const objectKey = createExecutionArtifactKey({
+      const publicId = createExecutionArtifactKey({
         workspaceId: tenant.workspaceId,
         sourceDocumentId: documentId,
         executionId: execution.id,
@@ -431,7 +441,7 @@ export function createWorkflowExecutionProcessor(dependencies: {
         } else if (node.kind === "replace_report") {
           const content = getAnalysisContent(outputs);
           await dependencies.storage.putObject({
-            key: objectKey,
+            key: publicId,
             body: jsonBytes({
               kind: "report",
               reportId: node.config.reportId,
@@ -447,10 +457,15 @@ export function createWorkflowExecutionProcessor(dependencies: {
               targetReportId: node.config.reportId,
               sourceDocumentId: documentId,
               proposedContent: toReportJson(content),
-              objectKey,
+              asset: {
+                publicId,
+                resourceType: "raw",
+                deliveryType: "authenticated",
+                format: "json",
+              },
             });
           if (!approval) {
-            await dependencies.storage.deleteObject(objectKey);
+            await dependencies.storage.deleteObject(publicId);
             return "stopped";
           }
           workerLogger.info(
@@ -480,11 +495,11 @@ export function createWorkflowExecutionProcessor(dependencies: {
                   { userId: toolContext.userId, workspaceId: toolContext.workspaceId },
                   input.documentId,
                 );
-                if (!source || source.status !== "ready" || !source.textObjectKey) {
+                if (!source || source.status !== "ready" || !source.textPublicId) {
                   throw new WorkflowStepError("DOCUMENT_NOT_READY");
                 }
                 const text = new TextDecoder().decode(
-                  await dependencies.storage.readObject(source.textObjectKey),
+                  await dependencies.storage.readObject(source.textPublicId),
                 );
                 const sections: ReadonlyArray<AnalysisSection> = input.sections ?? [
                   "summary",
@@ -558,12 +573,12 @@ export function createWorkflowExecutionProcessor(dependencies: {
         }
 
         await dependencies.storage.putObject({
-          key: objectKey,
+          key: publicId,
           body: jsonBytes(output),
           mediaType: "application/json",
         });
       } catch (error) {
-        await dependencies.storage.deleteObject(objectKey);
+        await dependencies.storage.deleteObject(publicId);
         const failure = failureDetails(error);
         await dependencies.executions.failStepAttempt(tenant, {
           executionId: execution.id,
@@ -594,11 +609,16 @@ export function createWorkflowExecutionProcessor(dependencies: {
         executionStepId: step.id,
         attemptId: attempt.attemptId,
         sourceDocumentId: documentId,
-        objectKey,
+        asset: {
+          publicId,
+          resourceType: "raw",
+          deliveryType: "authenticated",
+          format: "json",
+        },
         elapsedMs: Date.now() - startedAt,
       });
       if (!persisted) {
-        await dependencies.storage.deleteObject(objectKey);
+        await dependencies.storage.deleteObject(publicId);
         return "stopped";
       }
       return "advanced";

@@ -48,6 +48,15 @@ export interface DocumentService {
     workspaceId: string,
     input: DocumentUploadRequest,
   ): Promise<DocumentUploadIntent>;
+  uploadDocument(
+    userId: string,
+    workspaceId: string,
+    documentId: string,
+    input: {
+      readonly bytes: Uint8Array;
+      readonly contentType: string;
+    },
+  ): Promise<DocumentDto>;
   completeUpload(
     userId: string,
     workspaceId: string,

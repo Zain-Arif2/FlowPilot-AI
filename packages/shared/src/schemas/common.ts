@@ -1,3 +1,4 @@
+// Shared schema definitions
 import { z } from "zod";
 
 export const UuidSchema = z.string().uuid();
@@ -57,6 +58,8 @@ export const ApiErrorCodeSchema = z.enum([
   "SERVICE_UNAVAILABLE",
   "CSRF_FAILED",
   "INTERNAL_ERROR",
+  "PAYLOAD_TOO_LARGE",
+  "UNSUPPORTED_MEDIA_TYPE",
 ]);
 
 export const ApiErrorSchema = z

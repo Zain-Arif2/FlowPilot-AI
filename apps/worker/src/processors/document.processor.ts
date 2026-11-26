@@ -7,6 +7,10 @@ import {
   createDocumentTextKey,
   type ReturnTypeOfWorkerStorage,
 } from "../adapters/object-storage.js";
+import {
+  CLOUDINARY_RESOURCE_TYPE,
+  CLOUDINARY_DELIVERY_TYPE,
+} from "@flowpilot/shared/storage/cloudinary";
 import { workerLogger } from "../logger.js";
 
 const MAX_FILE_BYTES = 20_000_000;
@@ -170,18 +174,18 @@ export function createDocumentValidationProcessor(
     if (!document || document.status !== "validating") return;
 
     try {
-      const bytes = await storage.readObject(document.sourceObjectKey);
+      const bytes = await storage.readObject(document.sourcePublicId);
       const extraction = await extractDocument(
         document.mediaType,
         bytes,
         document.byteSize,
       );
-      const textObjectKey = createDocumentTextKey(
-        job.workspaceId,
-        job.documentId,
-      );
+      const textPublicId = createDocumentTextKey({
+        workspaceId: job.workspaceId,
+        documentId: job.documentId,
+      });
       await storage.putObject({
-        key: textObjectKey,
+        key: textPublicId,
         body: new TextEncoder().encode(extraction.text),
         mediaType: "text/plain; charset=utf-8",
       });
@@ -192,10 +196,15 @@ export function createDocumentValidationProcessor(
           checksum: extraction.checksum,
           pageCount: extraction.pageCount,
           textCharacterCount: extraction.textCharacterCount,
-          textObjectKey,
+          text: {
+            publicId: textPublicId,
+            resourceType: CLOUDINARY_RESOURCE_TYPE,
+            deliveryType: CLOUDINARY_DELIVERY_TYPE,
+            format: "txt",
+          },
         },
       );
-      if (!markedReady) await storage.deleteObject(textObjectKey);
+      if (!markedReady) await storage.deleteObject(textPublicId);
     } catch (error) {
       if (!(error instanceof DocumentValidationError)) throw error;
       await repository.markFailed(context, job.documentId, error.code);

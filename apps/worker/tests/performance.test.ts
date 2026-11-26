@@ -109,7 +109,7 @@ describe("synthetic document performance boundary", () => {
           | "failed"
           | "waiting_approval"
           | "skipped",
-        artifact: null as { objectKey: string } | null,
+        artifact: null as { publicId: string } | null,
       }));
       const objects = new Map<string, Uint8Array>();
       const extracted = await extractDocument("pdf", bytes, bytes.length);
@@ -156,7 +156,7 @@ describe("synthetic document performance boundary", () => {
             const step = steps.find((candidate) => candidate.id === input.executionStepId);
             if (!step) return false;
             step.status = "succeeded";
-            step.artifact = { objectKey: input.objectKey };
+            step.artifact = { publicId: input.asset.publicId };
             return true;
           },
           async createReportReplacementApproval() {
@@ -170,7 +170,7 @@ describe("synthetic document performance boundary", () => {
         },
         documents: {
           async findById() {
-            return { id: documentId, status: "ready", textObjectKey: "validated-text" };
+            return { id: documentId, status: "ready", textPublicId: "validated-text" };
           },
         },
         reports: {

@@ -26,7 +26,7 @@
 - [X] T006 [P] Create the Prisma database package in `packages/db/`
 - [X] T007 Configure strict TypeScript settings, including `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, and an `any`-rejection lint rule in `tsconfig.base.json` and root lint configuration
 - [X] T008 Add root scripts for install, development, typecheck, lint, formatting, unit tests, integration tests, and migrations in `package.json`
-- [X] T009 [P] Document hosted Neon, Upstash, and private S3-compatible service configuration in `.env.example` and `apps/api/src/config.ts`
+- [X] T009 [P] Document hosted Neon, Upstash, and Cloudinary configuration in `.env.example` and `apps/api/src/config.ts`; include `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_SIGNED_URL_TTL_SECONDS`, and `DOCUMENT_MAX_BYTES` (default 10 MB on the Cloudinary Free plan, configurable per deployment)
 - [X] T010 [P] Configure Vitest and Supertest test roots across `apps/*/tests/`, `packages/*/tests/`, and root test configuration
 - [X] T011 [P] Configure Next.js same-origin `/api/v1/*` routing to Express in `apps/web/next.config.ts`
 - [X] T012 Document required local and deployment environment variables in `apps/api/src/config.ts` and `.env.example`
@@ -59,9 +59,9 @@
 - [X] T025 Implement JWT authentication middleware, secure `__Host-` / `HttpOnly` cookie configuration, origin/CSRF checks, and workspace owner lookup in `apps/api/src/middleware/`
 - [X] T026 Implement workspace authorization middleware that sets and verifies tenant context inside a Prisma transaction in `apps/api/src/middleware/workspace.ts`
 - [X] T027 [P] Add API security tests for generic errors, unauthenticated access, unauthorized workspace access, CSRF, and missing tenant context in `apps/api/tests/security.test.ts`
-- [X] T028 Implement private S3-compatible object-store client and short-lived signed upload/download URLs in `apps/api/src/adapters/object-storage.ts`
+- [X] T028 Implement the Cloudinary storage adapter in `apps/api/src/adapters/object-storage.ts`: authenticated upload via signed server-side upload intent, raw-body upload and completion flow, authenticated signed download URLs (using `CLOUDINARY_SIGNED_URL_TTL_SECONDS`), workspace-prefixed `publicId` isolation, and authenticated asset deletion; replaces the former private S3-compatible object-store client
 - [X] T029 Implement OpenRouter provider adapter with strict JSON Schema parameters, route restrictions, timeouts, and provider-error mapping in `apps/api/src/adapters/openrouter.ts`
-- [X] T030 [P] Add unit tests for request redaction and object/OpenRouter adapter error behavior in `apps/api/tests/adapters.test.ts`
+- [ ] T030 [P] Add unit tests for request redaction and Cloudinary adapter behavior in `apps/api/tests/adapters.test.ts`; cover workspace-scoped `publicId` generation, `CloudinaryStorageError` mapping without exposing credentials, authenticated signed-URL issuance, and authenticated asset deletion; remove any remaining S3/`OBJECT_STORAGE_*` fixture references; fix the `OpenRouterConfig` shape mismatch so the config fixture passes `apiKey`, `model`, and `timeoutMs` directly rather than the full `AppConfig` object
 
 ### Durable execution foundation
 
@@ -87,8 +87,8 @@
 ### Tests for User Story 2
 
 - [X] T064 [P] [US2] Add Supertest authentication and workspace contract tests in `apps/api/tests/auth-workspaces.contract.test.ts`
-- [X] T065 [P] [US2] Add cross-workspace integration tests for every document/workflow/execution/report/approval endpoint in `apps/api/tests/workspace-isolation.test.ts`
-- [X] T066 [P] [US2] Add document-removal integration tests proving source/report/pending content and private execution artifacts are deleted and only content-free metadata remains in `apps/api/tests/document-deletion.test.ts`
+- [X] T065 [P] [US2] Add cross-workspace integration tests for every document/workflow/execution/report/approval endpoint in `apps/api/tests/workspace-isolation.test.ts`; ensure the config fixture uses Cloudinary fields (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_SIGNED_URL_TTL_SECONDS`, `DOCUMENT_MAX_BYTES`) and removes all `OBJECT_STORAGE_*` references
+- [X] T066 [P] [US2] Add document-removal integration tests proving source/report/pending content and private Cloudinary execution artifacts are deleted (via authenticated Cloudinary asset deletion through the outbox) and only content-free metadata remains in `apps/api/tests/document-deletion.test.ts`
 
 ### Implementation for User Story 2
 
@@ -98,7 +98,7 @@
 - [X] T070 [US2] Implement refresh-token rotation with reuse detection, logout family revocation, current-user lookup, and secure cookie clearing in `apps/api/src/modules/auth/`
 - [X] T071 [US2] Implement workspace list/create/rename endpoints in `apps/api/src/modules/workspaces/`
 - [X] T072 [US2] Enforce owner-only access in every workspace-scoped route and repository call in `apps/api/src/modules/`
-- [X] T073 [US2] Implement immediate document removal state, report/pending approval cancellation, private execution-artifact cleanup outbox event, and execution reference detachment in `apps/api/src/modules/documents/deletion.ts`
+- [X] T073 [US2] Implement immediate document removal state, report/pending approval cancellation, authenticated Cloudinary asset deletion outbox event (covering `sourcePublicId`, `textPublicId`, and workspace-prefixed execution artifact public IDs), and execution reference detachment in `apps/api/src/modules/documents/deletion.ts`
 - [X] T074 [US2] Implement document delete endpoint `DELETE /workspaces/{workspaceId}/documents/{documentId}` in `apps/api/src/modules/documents/`
 - [X] T075 [P] [US2] Build registration, login, logout, workspace selection, and workspace rename UI in `apps/web/src/features/auth/` and `apps/web/src/features/workspaces/`
 - [X] T076 [US2] Verify browser navigation and API calls never expose or request resources outside the selected creator-owned workspace in `apps/web/src/features/workspaces/`
@@ -122,14 +122,14 @@
 
 ### Implementation for User Story 1
 
-- [X] T043 [P] [US1] Implement document repositories for `Document.sourceObjectKey`, `Document.textObjectKey`, `Document.status`, and document metadata in `packages/db/src/repositories/document.repository.ts`, citing [data-model.md](./data-model.md): `Document.status`, `Document.byteSize`, `Document.pageCount`, `Document.textCharacterCount`
+- [X] T043 [P] [US1] Implement document repositories for `Document.sourcePublicId`, `Document.textPublicId`, `Document.status`, and document metadata in `packages/db/src/repositories/document.repository.ts`, citing [data-model.md](./data-model.md): `Document.status`, `Document.byteSize`, `Document.pageCount`, `Document.textCharacterCount`; Cloudinary asset references are stored as `sourcePublicId`, `sourceResourceType`, `sourceDeliveryType`, `sourceFormat`, `textPublicId`, `textResourceType`, `textDeliveryType`, `textFormat` rather than the former `sourceObjectKey` / `textObjectKey`
 - [X] T044 [P] [US1] Implement workflow repositories for `Workflow.definition`, `Workflow.revision`, and `Workflow.definitionVersion` in `packages/db/src/repositories/workflow.repository.ts`
 - [X] T045 [P] [US1] Implement execution repositories for immutable snapshots, step-attempt history, and workspace-scoped `ExecutionArtifact` references in `packages/db/src/repositories/execution.repository.ts`; add the Prisma migration and RLS policy
 - [X] T046 [P] [US1] Implement report and pending-report repositories in `packages/db/src/repositories/report.repository.ts` and `packages/db/src/repositories/approval.repository.ts`
-- [X] T047 [US1] Implement document upload intent, private URL issuance, completion, readiness, and file validation for `POST /workspaces/{workspaceId}/documents` and `/complete` in `apps/api/src/modules/documents/`
+- [X] T047 [US1] Implement the document upload flow in `apps/api/src/modules/documents/`: issue a server-side upload intent (signed Cloudinary upload parameters), receive the raw file body from the client, forward it to Cloudinary via the upload API, record the resulting `publicId`/`resourceType`/`deliveryType`/`format` metadata, and transition the document to `validating` via the completion endpoint (`POST /workspaces/{workspaceId}/documents` and `/complete`); no presigned browser-direct upload URLs are involved
 - [X] T048 [US1] Implement PDF parsing with native page count and PDF.js text extraction in `apps/worker/src/processors/document.processor.ts`
 - [X] T049 [US1] Implement DOCX raw-text extraction and UTF-8 TXT decoding with bounded memory and the 300,000-character extracted-text limit in `apps/worker/src/processors/document.processor.ts`, citing [data-model.md](./data-model.md): `Document.textCharacterCount`
-- [X] T050 [US1] Implement document validation, 20 MB/file limit, 100 native PDF-page limit, stable failure codes, and ready status transitions in `apps/worker/src/processors/document.processor.ts`, citing [data-model.md](./data-model.md): `Document.byteSize`, `Document.pageCount`, `Document.mediaType`
+- [X] T050 [US1] Implement document validation, file-size enforcement, 100 native PDF-page limit, stable failure codes, and ready status transitions in `apps/worker/src/processors/document.processor.ts`, citing [data-model.md](./data-model.md): `Document.byteSize`, `Document.pageCount`, `Document.mediaType`; the enforced size limit is read from `DOCUMENT_MAX_BYTES` (default 10 MB on the Cloudinary Free plan; override in `.env` only when the account plan supports a higher raw-file limit — do not assume 20 MB)
 - [X] T051 [US1] Implement AI workflow proposal generation for `POST /workspaces/{workspaceId}/workflow-proposals` in `apps/api/src/modules/workflows/proposal.ts`
 - [X] T052 [US1] Validate proposal JSON with the shared graph schema and semantic rules; reject unsupported tools and malformed output in `apps/api/src/modules/workflows/validate.ts`
 - [X] T053 [US1] Implement save/create/update workflow endpoints and optimistic revision checks in `apps/api/src/modules/workflows/`
@@ -209,13 +209,32 @@
 - [X] T101 [P] Add npm production start scripts for the Next.js app, API, and worker; keep service credentials external in `apps/web/package.json`, `apps/api/package.json`, and `apps/worker/package.json`
 - [X] T102 [P] Validate API and worker database/Redis dependencies before accepting or processing work, and expose API readiness in `/readyz` and worker startup status in app entry points
 - [X] T103 [P] Add rate limits for authentication, workflow proposals, uploads, and AI calls in `apps/api/src/middleware/rate-limit.ts`
-- [X] T104 [P] Add privacy and redaction checks that reject logs/output containing prompts, document text, report content, credentials, or provider secrets in `apps/api/tests/redaction.test.ts` and `apps/worker/tests/redaction.test.ts`
-- [X] T105 Run strict typecheck and remove or documented-justify any remaining `any` usage across `apps/` and `packages/`
+- [X] T104 [P] Add privacy and redaction checks that reject logs/output containing prompts, document text, report content, credentials, Cloudinary API secrets, or provider secrets in `apps/api/tests/redaction.test.ts` and `apps/worker/tests/redaction.test.ts`; verify that `CLOUDINARY_API_SECRET` and Cloudinary-signed URLs with embedded signatures are never written to logs
+- [ ] T105 Run strict typecheck and remove or document-justify any remaining `any` usage across `apps/` and `packages/`; the current typecheck fails due to stale `OBJECT_STORAGE_*` references in `workspace-isolation.test.ts`, missing `DOCUMENT_MAX_BYTES` in multiple test config fixtures, and an `OpenRouterConfig` shape mismatch in `adapters.test.ts` — these must be resolved before this task can be marked complete
 - [ ] T106 Run the unit and integration suites, inspect coverage for authorization, validation, retry, and deletion, and fix failures in `apps/**/tests/` and `packages/**/tests/`
 - [X] T107 Run the OpenAPI lint and align stable response schemas with shared Zod contracts in `specs/001-workflow-automation/contracts/openapi.yaml` and `packages/shared/src/schemas/`
 - [ ] T108 Execute the quickstart end-to-end acceptance walkthrough and document exact results in `specs/001-workflow-automation/quickstart.md`
-- [X] T109 Run synthetic performance validation for 20 MB/100-page documents and 3-minute report target in `apps/worker/tests/performance.test.ts`
-- [X] T110 Run a final workspace-isolation/security review across database RLS, API middleware, object storage, and worker state in `apps/`, `packages/db/`, and `packages/shared/`
+- [X] T109 Run synthetic performance validation for documents up to `DOCUMENT_MAX_BYTES` (default 10 MB) and 100-page PDFs with the 3-minute report target in `apps/worker/tests/performance.test.ts`
+- [ ] T110 Run a final workspace-isolation/security review across database RLS, API middleware, Cloudinary storage adapter (workspace-prefixed public IDs, authenticated asset access, authenticated deletion, `CLOUDINARY_API_SECRET` protection), and worker state in `apps/`, `packages/db/`, and `packages/shared/`; this task is incomplete until all Cloudinary-specific security properties are verified against a live adapter
+
+---
+
+## Phase 8: Cloudinary Storage Verification
+
+**Purpose**: Verify that every Cloudinary-specific storage behaviour is correct — uploads, authenticated access, deletion, consistency, and integration — using both mocked unit tests and real Cloudinary integration tests where credentials are available.
+
+> [!IMPORTANT]
+> Tasks T111–T117 are **mocked unit / contract tests** that must pass in CI without real Cloudinary credentials.
+> Task T118 is a **real Cloudinary integration test** that is opt-in and must never run against production resources.
+
+- [ ] T111 [P] Add unit tests for `createObjectStorage` and `createPrivateObjectKey` in `apps/api/tests/adapters.test.ts`: verify that generated public IDs are workspace- and document-scoped (prefix `flowpilot/workspaces/<workspaceId>/documents/<documentId>/`), unique across two calls for the same inputs, and free of the original filename; verify that `CloudinaryStorageError` wrapping does not echo the raw cause message; verify the `CLOUDINARY_SIGNED_URL_TTL_SECONDS` default and range
+- [ ] T112 [P] Add unit tests covering the authenticated signed-download flow in the Cloudinary adapter: mock the Cloudinary SDK to assert that `sign_url: true` and the correct TTL are passed for every asset retrieval, that the signed URL is never logged, and that an SDK error is mapped to `CloudinaryStorageError` without exposing the raw error body
+- [ ] T113 [P] Add unit tests covering authenticated Cloudinary asset deletion: mock the Cloudinary SDK `destroy` call and verify it is called with the correct `publicId` and `resource_type`, that deletion is idempotent for a `not found` SDK response, and that a network/SDK error is mapped to `CloudinaryStorageError`
+- [ ] T114 [P] Add unit tests verifying the API and worker storage interface consistency: assert that `DocumentRepository.createUploadIntent` stores `sourcePublicId`, `sourceResourceType`, `sourceDeliveryType`, and `sourceFormat` (not `sourceObjectKey`); that `markReady` stores `textPublicId`, `textResourceType`, `textDeliveryType`, and `textFormat` (not `textObjectKey`); and that `ExecutionArtifact` rows reference a `publicId` field rather than `objectKey`
+- [ ] T115 [P] Add unit tests for the document extraction and report generation code paths that use Cloudinary assets: mock the worker storage adapter's `readObject` call to return fixture bytes for a known `publicId`, run the extraction, and assert that the resulting `textPublicId` written by `markReady` matches the expected Cloudinary public-ID format
+- [ ] T116 [P] Add unit tests covering failure handling, retries, and idempotent deletion in the outbox processor: assert that a `CloudinaryStorageError` on deletion is retried up to the configured maximum; that a `not found` response from Cloudinary is treated as a successful deletion (idempotent); that after all Cloudinary deletions succeed the outbox event is marked published and the document row is purged; and that a permanent deletion failure does not leave the document in a non-`deleting` state
+- [ ] T117 [P] Add contract/unit tests verifying that the `workspace-isolation.test.ts` and all other API test config fixtures use only Cloudinary config fields (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_SIGNED_URL_TTL_SECONDS`, `DOCUMENT_MAX_BYTES`) and contain no `OBJECT_STORAGE_*` references; assert that `readConfig` rejects a config object that supplies `OBJECT_STORAGE_ENDPOINT` instead of `CLOUDINARY_CLOUD_NAME`
+- [ ] T118 Perform a real Cloudinary lifecycle integration test when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, and `FLOWPILOT_TEST_CONFIRM_NON_PRODUCTION` are set in the environment; the test must: (1) upload a small fixture file using the server-side upload flow and assert the returned `publicId` has the expected workspace prefix; (2) retrieve the asset via an authenticated signed URL and verify content integrity; (3) delete the asset via authenticated deletion and verify the Cloudinary API confirms removal; (4) attempt a second deletion and verify idempotent success; guard this test with the `FLOWPILOT_TEST_CONFIRM_NON_PRODUCTION` sentinel so it never runs in CI without explicit opt-in; document exact results in `specs/001-workflow-automation/quickstart.md` after a successful run
 
 ---
 
@@ -230,6 +249,7 @@
 - **User Story 3**: Depends on Phase 2 and shared workflow validation; can proceed in parallel with US1/US2 after foundation.
 - **User Story 4**: Depends on execution, approval, and state foundations plus the relevant US1 implementation.
 - **Polish**: Depends on all required user stories.
+- **Phase 8 Cloudinary Verification**: Depends on T028 (Cloudinary adapter), T043 (document repository), T073 (deletion), and T104 (redaction); T111–T117 (mocked) can run in CI; T118 (real integration) requires opt-in credentials.
 
 ### User Story Dependencies
 
@@ -254,6 +274,7 @@
 - Within US1, document repositories/processors, proposal logic, report tools, and web UI are parallelizable after foundational contracts.
 - Within US2, auth repositories/endpoints and workspace UI can proceed in parallel after tenant middleware.
 - Within US4, execution history and approval repositories/endpoints/UI can proceed in parallel after state entities exist.
+- Phase 8 T111–T117 are independently parallelizable mocked tests; T118 runs sequentially after all mocked tests pass.
 
 ---
 
@@ -297,6 +318,7 @@ T075 Auth/workspace UI
 1. Add US3 for visual editing and reusable conditional workflows.
 2. Add US4 for execution history, approvals, safe retry, and review.
 3. Complete Polish, security, performance, and acceptance validation.
+4. Complete Phase 8 Cloudinary verification (mocked T111–T117 in CI; opt-in T118 with real credentials).
 
 ### Parallel Team Strategy
 
@@ -312,6 +334,7 @@ T075 Auth/workspace UI
 - [P] tasks affect different files or isolated concerns and have no dependency on incomplete tasks.
 - [USn] labels appear only in user-story phases.
 - Setup and Foundational tasks do not have story labels.
-- Every task starts with `- [ ]`, a sequential `T` ID, and an exact or scoped file path.
+- Every task starts with `- [ ]` or `- [X]`, a sequential `T` ID, and an exact or scoped file path.
 - Constrained fields cite `data-model.md` with the exact `Entity.field` name.
 - No implementation code is created by this task-generation step.
+- Storage migration note: the project migrated from a private S3-compatible object store (formerly configured via `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_REGION`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY`) to Cloudinary (configured via `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_SIGNED_URL_TTL_SECONDS`, `DOCUMENT_MAX_BYTES`). Any remaining `OBJECT_STORAGE_*` references in source or test files are outdated and must be replaced. The old `sourceObjectKey` / `textObjectKey` database fields have been replaced by `sourcePublicId` / `textPublicId` (and their associated `resourceType`, `deliveryType`, `format` fields). The Cloudinary Free plan enforces a 10 MB limit on raw file uploads; the `DOCUMENT_MAX_BYTES` default reflects this. Do not assume a 20 MB limit unless the account plan explicitly supports it.

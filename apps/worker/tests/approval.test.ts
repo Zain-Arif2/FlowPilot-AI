@@ -117,7 +117,7 @@ function createApprovalHarness() {
       | "succeeded"
       | "failed"
       | "skipped",
-    artifact: null as { objectKey: string } | null,
+    artifact: null as { publicId: string } | null,
   }));
 
   const approvals: ApprovalRecord[] = [];
@@ -311,7 +311,7 @@ function createApprovalHarness() {
       const step = steps.find((candidate) => candidate.id === input.executionStepId);
       if (!step) return false;
       step.status = "succeeded";
-      step.artifact = { objectKey: input.objectKey };
+      step.artifact = { publicId: input.asset.publicId };
       return true;
     },
     async createReportReplacementApproval(_context, input) {
@@ -342,7 +342,7 @@ function createApprovalHarness() {
         proposedContent: input.proposedContent,
       });
       step.status = "waiting_approval";
-      step.artifact = { objectKey: input.objectKey };
+      step.artifact = { publicId: input.asset.publicId };
       execution.status = "waiting_approval";
       return { approvalId };
     },
@@ -369,7 +369,7 @@ function createApprovalHarness() {
     executions: workerExecutions,
     documents: {
       async findById() {
-        return { id: documentId, status: "ready", textObjectKey: "doc-text" };
+        return { id: documentId, status: "ready", textPublicId: "doc-text" };
       },
     },
     reports: {

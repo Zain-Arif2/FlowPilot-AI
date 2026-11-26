@@ -10,10 +10,12 @@ Build a TypeScript monorepo with a Next.js workflow-builder UI, an Express
 business API, and a BullMQ worker. The API validates user and AI data through
 shared Zod schemas, enforces workspace ownership in both application logic and
 PostgreSQL RLS, and persists run state in Neon. Documents and extracted text
-use private S3-compatible storage. OpenRouter returns structured workflow and
-analysis results; only a server-owned, validated tool registry can perform
-actions. PostgreSQL-backed execution state and an outbox make queue delivery,
-retries, approval pauses, and document deletion recoverable.
+use Cloudinary for server-side storage with workspace-prefixed public IDs,
+authenticated signed access, and authenticated asset deletion. OpenRouter
+returns structured workflow and analysis results; only a server-owned, validated
+tool registry can perform actions. PostgreSQL-backed execution state and an
+outbox make queue delivery, retries, approval pauses, and document deletion
+recoverable.
 
 ## Technical Context
 
@@ -24,12 +26,13 @@ packages; Node.js 24 LTS.
 `@xyflow/react`, `pdfjs-dist`, Mammoth, OpenRouter API, BullMQ, Redis, Vitest,
 and Supertest.
 
-**Storage**: Neon PostgreSQL for application data; Redis for BullMQ; private
-S3-compatible object storage for source documents and derived extracted text.
-Use separately provisioned non-production hosted services for integration
-tests; never use production resources for test runs.
+**Storage**: Neon PostgreSQL for application data; Redis for BullMQ; Cloudinary
+for source documents, derived extracted text, and execution artifacts (workspace-
+prefixed public IDs, authenticated signed URLs, server-side upload, and
+authenticated asset deletion). Use separately provisioned non-production hosted
+services for integration tests; never use production resources for test runs.
 
-**Testing**: Vitest unit tests, Supertest API tests, PostgreSQL/Redis/S3
+**Testing**: Vitest unit tests, Supertest API tests, PostgreSQL/Redis/Cloudinary
 integration tests, strict TypeScript checking, and the acceptance walkthrough
 in [quickstart.md](./quickstart.md).
 
@@ -65,7 +68,7 @@ testing before production.
 | Principle | Gate |
 |---|---|
 | Modular architecture | **PASS** — one web app, one API, one worker, and only shared contracts/database packages; no per-domain services. |
-| Privacy and workspace isolation | **PASS** — ownership checks, workspace-scoped repositories, RLS, private object storage, and deletion cleanup. |
+| Privacy and workspace isolation | **PASS** — ownership checks, workspace-scoped repositories, RLS, Cloudinary workspace-prefixed private assets with authenticated access and deletion, and outbox-driven cleanup. |
 | Validate trust boundaries | **PASS** — Zod validation for requests, graph definitions, tool arguments, uploads, and AI outputs. |
 | Approved AI tooling | **PASS** — fixed typed action registry; no model-generated code or dynamic capabilities. |
 | Human approval | **PASS** — report replacement is persisted as pending and cannot commit before an owner decision. |
@@ -209,8 +212,8 @@ serialized graph is validated again by the API/worker.
   identifier-only jobs to BullMQ. PostgreSQL is authoritative for state; Redis
   loss or duplicate delivery does not lose the run.
 - A worker reloads the execution under its verified workspace context, skips
-  completed steps, loading their validated output from private S3 artifacts
-  referenced by workspace-scoped `ExecutionArtifact` rows. A worker writes an
+  completed steps, loading their validated output from private Cloudinary
+  artifacts (workspace-prefixed public IDs stored as `ExecutionArtifact` rows). A worker writes an
   artifact before committing its reference and successful step/event
   transition, so a restart never needs to rerun a completed step. Artifacts
   remain private while the run is active or awaiting approval and are removed
@@ -250,9 +253,12 @@ serialized graph is validated again by the API/worker.
   with `__Host-` prefixes, and `SameSite=Lax`; validate origins/CSRF on
   mutations, rate-limit sign-in, refresh, and AI endpoints, and return a generic
   invalid-credentials response.
-- Keep object storage private. Uploads use random staging keys and short-lived
-  URLs; the server verifies signature, byte size, supported type, and page
-  count before marking a document ready. Parsing runs in the worker with size,
+- Keep Cloudinary storage private. The API forwards raw file bytes to Cloudinary
+  server-side using signed upload parameters; browsers do not upload directly.
+  Assets are accessed only through authenticated signed URLs
+  (`CLOUDINARY_SIGNED_URL_TTL_SECONDS`); the `CLOUDINARY_API_SECRET` is never
+  logged or returned to clients. Workspace isolation is enforced through a
+  workspace-prefixed public-ID scheme. Parsing runs in the worker with size,
   time, and memory bounds. Scanned PDFs without text, encrypted files, and
   corrupt files fail clearly; OCR is out of scope.
 - PDF files use native page count; DOCX/TXT use a fixed 300,000-character
@@ -271,9 +277,11 @@ serialized graph is validated again by the API/worker.
 - Supertest runs the Express app in-process for authentication, request
   validation, stable errors, owner/workspace checks, and endpoint contracts.
 - Integration tests use isolated non-production PostgreSQL with the same RLS
-  migration, Redis/BullMQ, and private S3-compatible storage. Verify
+  migration, Redis/BullMQ, and a disposable Cloudinary account with test-only
+  credentials (guarded by `FLOWPILOT_TEST_CONFIRM_NON_PRODUCTION`). Verify
   cross-workspace denial, duplicate job delivery, worker restart recovery,
-  approval pause/resume, safe retry, and document deletion.
+  approval pause/resume, safe retry, and document deletion including Cloudinary
+  asset cleanup.
 - A small evaluation set checks OpenRouter output quality and the spec's
   document success criteria; it is opt-in and not part of deterministic unit
   tests.

@@ -93,7 +93,9 @@ const services = {
     refreshTtlSeconds: config.JWT_REFRESH_TTL_SECONDS,
   }),
   workspaces: createWorkspaceService(createWorkspaceRepository(prisma)),
-  documents: createDocumentService(createDocumentRepository(prisma), objectStorage),
+  documents: createDocumentService(createDocumentRepository(prisma), objectStorage, {
+    maxUploadBytes: config.DOCUMENT_MAX_BYTES,
+  }),
   workflows: createWorkflowService(
     createWorkflowRepository(prisma),
     workflowProposalService,

@@ -1,120 +1,41 @@
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-import { UuidSchema } from "@flowpilot/shared";
+import { createCloudinaryStorage, type CloudinaryStorageConfig, createDocumentSourcePublicId as createDocumentSourceKey, createDocumentTextPublicId as createDocumentTextKey, createExecutionArtifactPublicId as createExecutionArtifactKey, CLOUDINARY_RESOURCE_TYPE, CLOUDINARY_DELIVERY_TYPE } from "@flowpilot/shared/storage/cloudinary";
 
-export interface WorkerStorageConfig {
-  readonly endpoint: string;
-  readonly region: string;
-  readonly bucket: string;
-  readonly accessKey: string;
-  readonly secretKey: string;
-}
+// Re-export key-generation helpers for the worker processor.
+export {
+  createDocumentSourceKey,
+  createDocumentTextKey,
+  createExecutionArtifactKey,
+};
 
+export type WorkerStorageConfig = CloudinaryStorageConfig;
+
+/**
+ * Wrapper around the Cloudinary storage to provide the generic object storage API expected by the worker.
+ * Maps:
+ *   readObject   -> downloadAsset (authenticated raw, 300s TTL)
+ *   putObject    -> uploadAsset
+ *   deleteObject -> deleteAsset (authenticated raw)
+ */
 export function createWorkerObjectStorage(config: WorkerStorageConfig) {
-  const client = new S3Client({
-    region: config.region,
-    endpoint: config.endpoint,
-    forcePathStyle: true,
-    credentials: {
-      accessKeyId: config.accessKey,
-      secretAccessKey: config.secretKey,
-    },
-  });
-
-  const deleteObject = async (key: string): Promise<void> => {
-    await client.send(
-      new DeleteObjectCommand({ Bucket: config.bucket, Key: key }),
-    );
-  };
-
+  const storage = createCloudinaryStorage(config);
   return {
-    async readObject(key: string): Promise<Uint8Array> {
-      const response = await client.send(
-        new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-      );
-      if (!response.Body) throw new Error("Object storage returned an empty body.");
-      return response.Body.transformToByteArray();
-    },
-
-    async putObject(input: {
-      readonly key: string;
-      readonly body: Uint8Array;
-      readonly mediaType: string;
-    }): Promise<void> {
-      await client.send(
-        new PutObjectCommand({
-          Bucket: config.bucket,
-          Key: input.key,
-          Body: input.body,
-          ContentType: input.mediaType,
-        }),
+    // Preserve original Cloudinary storage methods
+    ...storage,
+    // Generic object storage API expected by workers
+    async readObject(publicId: string): Promise<Uint8Array> {
+      return storage.downloadAsset(
+        { publicId, resourceType: CLOUDINARY_RESOURCE_TYPE, deliveryType: CLOUDINARY_DELIVERY_TYPE, format: "" },
+        300,
       );
     },
-
+    async putObject({ key, body }: { key: string; body: Uint8Array; mediaType: string }): Promise<void> {
+      await storage.uploadAsset({ publicId: key, body });
+    },
     async deleteObject(key: string): Promise<void> {
-      await deleteObject(key);
+      await storage.deleteAsset({ publicId: key, resourceType: CLOUDINARY_RESOURCE_TYPE, deliveryType: CLOUDINARY_DELIVERY_TYPE, format: "" });
     },
-
-    async deletePrefix(prefix: string): Promise<void> {
-      let continuationToken: string | undefined;
-      do {
-        const page = await client.send(
-          new ListObjectsV2Command({
-            Bucket: config.bucket,
-            Prefix: prefix,
-            ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
-          }),
-        );
-        const keys = (page.Contents ?? [])
-          .map((object) => object.Key)
-          .filter((key): key is string => typeof key === "string");
-        for (const key of keys) await deleteObject(key);
-        if (page.IsTruncated && !page.NextContinuationToken) {
-          throw new Error("Object storage omitted a continuation token.");
-        }
-        continuationToken = page.IsTruncated
-          ? page.NextContinuationToken
-          : undefined;
-      } while (continuationToken);
-    },
-  };
+  } as const;
 }
 
-export function createDocumentTextKey(
-  workspaceId: string,
-  documentId: string,
-): string {
-  const safeWorkspaceId = UuidSchema.parse(workspaceId);
-  const safeDocumentId = UuidSchema.parse(documentId);
-  return `workspaces/${safeWorkspaceId}/documents/${safeDocumentId}/text/validated.txt`;
-}
 
-export function createExecutionArtifactKey(input: {
-  readonly workspaceId: string;
-  readonly sourceDocumentId: string;
-  readonly executionId: string;
-  readonly executionStepId: string;
-}): string {
-  const workspaceId = UuidSchema.parse(input.workspaceId);
-  const sourceDocumentId = UuidSchema.parse(input.sourceDocumentId);
-  const executionId = UuidSchema.parse(input.executionId);
-  const executionStepId = UuidSchema.parse(input.executionStepId);
-  return [
-    "workspaces",
-    workspaceId,
-    "documents",
-    sourceDocumentId,
-    "artifacts",
-    executionId,
-    `${executionStepId}.json`,
-  ].join("/");
-}
-
-export type ReturnTypeOfWorkerStorage = ReturnType<
-  typeof createWorkerObjectStorage
->;
+export type ReturnTypeOfWorkerStorage = ReturnType<typeof createWorkerObjectStorage>;

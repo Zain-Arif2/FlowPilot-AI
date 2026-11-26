@@ -8,8 +8,8 @@ manual verification procedure, not a claim that those steps have passed.
 ## Prerequisites
 
 - Node.js 24 LTS and npm (included with Node.js).
-- A Neon PostgreSQL database, an Upstash Redis database, and private
-  S3-compatible object storage.
+- A Neon PostgreSQL database, an Upstash Redis database, and a Cloudinary
+  account (Free plan or higher) for document and artifact storage.
 - An OpenRouter API key and an approved model/provider configuration (default:
   `google/gemini-2.5-flash-lite`) that supports strict structured output and
   zero-retention routing. Automated tests use a mock AI adapter; never put a
@@ -29,9 +29,13 @@ manual verification procedure, not a claim that those steps have passed.
    setup uses the direct Neon host, not the `-pooler` host.
 3. Set `REDIS_URL` to Upstash’s TLS Redis protocol URL (`rediss://`). BullMQ
    does not use the Upstash REST URL or REST token.
-4. Configure a private S3-compatible bucket and its endpoint, region, access
-   key, and secret. The endpoint must be reachable by browsers for short-lived
-   signed uploads.
+4. Configure Cloudinary: set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
+   and `CLOUDINARY_API_SECRET` from your Cloudinary dashboard. Set
+   `CLOUDINARY_SIGNED_URL_TTL_SECONDS` (default 300) for authenticated asset
+   access. Set `DOCUMENT_MAX_BYTES` to enforce the upload limit (default
+   10,000,000 — the Cloudinary Free plan raw-file cap; increase only when your
+   account plan supports a higher limit). The API forwards raw file bytes to
+   Cloudinary server-side; browsers do not need direct Cloudinary access.
 5. Add the OpenRouter credentials, `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`
    (at least 32 characters each, distinct), and set `APP_ORIGIN` to the local
    web origin. Keep `COOKIE_SECURE=false` for local HTTP only; use `true` behind
@@ -105,7 +109,10 @@ integration services were provisioned for this validation, so the
 database-backed integration tests were not run. The integration runner requires
 `FLOWPILOT_TEST_CONFIRM_NON_PRODUCTION` and `FLOWPILOT_TEST_DATABASE_URL`,
 `FLOWPILOT_TEST_MIGRATION_URL`, and `FLOWPILOT_TEST_REDIS_URL`; it deliberately
-does not fall back to the ordinary application URLs.
+does not fall back to the ordinary application URLs. The real Cloudinary
+integration test (T118) additionally requires `CLOUDINARY_CLOUD_NAME`,
+`CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` pointing to a disposable
+non-production Cloudinary account.
 
 ## Target End-to-End Acceptance Walkthrough
 

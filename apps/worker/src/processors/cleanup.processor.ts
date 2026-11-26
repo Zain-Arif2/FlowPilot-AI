@@ -1,6 +1,7 @@
 import type { TenantContext } from "@flowpilot/db/tenant-transaction";
 import type { CleanupJob } from "../queue/contracts.js";
 import type { ReturnTypeOfWorkerStorage } from "../adapters/object-storage.js";
+import { documentStoragePrefix } from "@flowpilot/shared/storage/cloudinary";
 import { workerLogger } from "../logger.js";
 
 interface DocumentCleanupRepository {
@@ -15,7 +16,7 @@ interface ExecutionArtifactCleanupRepository {
   listForExecution(
     context: TenantContext,
     executionId: string,
-  ): Promise<ReadonlyArray<{ readonly objectKey: string }>>;
+  ): Promise<ReadonlyArray<{ readonly publicId: string }>>;
   deleteForExecution(context: TenantContext, executionId: string): Promise<unknown>;
 }
 
@@ -31,7 +32,7 @@ export function createCleanupProcessor(
       const document = await documents.findById(context, job.aggregateId);
       if (!document || document.status !== "deleting") return;
       await storage.deletePrefix(
-        `workspaces/${job.workspaceId}/documents/${document.id}/`,
+        documentStoragePrefix({ workspaceId: job.workspaceId, documentId: document.id }),
       );
       await documents.completeDeletion(context, document.id);
       workerLogger.info(
@@ -46,7 +47,7 @@ export function createCleanupProcessor(
       job.aggregateId,
     );
     for (const artifact of executionArtifacts) {
-      await storage.deleteObject(artifact.objectKey);
+      await storage.deleteObject(artifact.publicId);
     }
     await artifacts.deleteForExecution(context, job.aggregateId);
     workerLogger.info(

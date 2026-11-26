@@ -121,8 +121,17 @@ model Document {
   byteSize           Int
   pageCount          Int?
   textCharacterCount Int?
-  sourceObjectKey    String          @unique
-  textObjectKey      String?         @unique
+  sourcePublicId     String          @unique
+  sourceResourceType String          @default("raw")
+  sourceDeliveryType String          @default("authenticated")
+  sourceFormat       String
+  sourceAssetId      String?
+  sourceVersion      Int?
+  sourceUploadedAt   DateTime?       @db.Timestamptz(6)
+  textPublicId       String?         @unique
+  textResourceType   String?
+  textDeliveryType   String?
+  textFormat         String?
   checksum           String?
   status             DocumentStatus  @default(uploading)
   failureCode        String?
@@ -238,7 +247,10 @@ model ExecutionArtifact {
   executionId     String        @db.Uuid
   executionStepId String        @db.Uuid
   sourceDocumentId String?      @db.Uuid
-  objectKey       String        @unique
+  publicId        String        @unique
+  resourceType    String        @default("raw")
+  deliveryType    String        @default("authenticated")
+  format          String
   createdAt       DateTime      @default(now()) @db.Timestamptz(6)
   workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   execution       Execution     @relation(fields: [workspaceId, executionId], references: [workspaceId, id], onDelete: Cascade)

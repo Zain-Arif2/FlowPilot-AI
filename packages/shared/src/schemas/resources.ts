@@ -8,6 +8,13 @@ export const DocumentMediaTypeSchema = z.enum([
   "text/plain",
 ]);
 
+/**
+ * Absolute product ceiling. Cloudinary plan file-size limits can be lower
+ * (Free: 10 MB raw files, Plus: 20 MB, Advanced: 40 MB), so the API enforces
+ * the configured DOCUMENT_MAX_BYTES value in addition to this schema ceiling.
+ */
+export const DOCUMENT_MAX_BYTES = 20_000_000;
+
 export const DocumentStatusSchema = z.enum([
   "uploading",
   "validating",
@@ -20,7 +27,7 @@ export const DocumentUploadRequestSchema = z
   .object({
     filename: z.string().min(1).max(255),
     mediaType: DocumentMediaTypeSchema,
-    byteSize: z.number().int().min(1).max(20_000_000),
+    byteSize: z.number().int().min(1).max(DOCUMENT_MAX_BYTES),
   })
   .strict();
 
@@ -30,7 +37,7 @@ export const DocumentSchema = z
     status: DocumentStatusSchema,
     filename: z.string().min(1).max(255),
     mediaType: DocumentMediaTypeSchema,
-    byteSize: z.number().int().min(1).max(20_000_000),
+    byteSize: z.number().int().min(1).max(DOCUMENT_MAX_BYTES),
     failureCode: z.string().optional(),
     createdAt: z.string().datetime(),
   })
@@ -39,8 +46,17 @@ export const DocumentSchema = z
 export const DocumentUploadIntentSchema = z
   .object({
     document: DocumentSchema,
-    uploadUrl: z.string().url(),
+    /** Relative API path; the browser uploads the raw file body to this endpoint. */
+    uploadUrl: z.string().min(1),
     expiresAt: z.string().datetime(),
+    /** Configured server-side limit for this deployment. */
+    maxUploadBytes: z.number().int().positive(),
+  })
+  .strict();
+
+export const DocumentUploadLimitsSchema = z
+  .object({
+    maxUploadBytes: z.number().int().positive(),
   })
   .strict();
 

@@ -31,12 +31,30 @@ export async function startWorkerFoundation(): Promise<void> {
   };
 
   const storageConfig = {
-    endpoint: required("OBJECT_STORAGE_ENDPOINT"),
-    region: required("OBJECT_STORAGE_REGION"),
-    bucket: required("OBJECT_STORAGE_BUCKET"),
-    accessKey: required("OBJECT_STORAGE_ACCESS_KEY"),
-    secretKey: required("OBJECT_STORAGE_SECRET_KEY"),
+    cloudName: required("CLOUDINARY_CLOUD_NAME"),
+    apiKey: required("CLOUDINARY_API_KEY"),
+    apiSecret: required("CLOUDINARY_API_SECRET"),
   };
+  const documentMaxBytes = Number(process.env.DOCUMENT_MAX_BYTES ?? "10000000");
+  if (
+    !Number.isInteger(documentMaxBytes) ||
+    documentMaxBytes < 1 ||
+    documentMaxBytes > 20_000_000
+  ) {
+    throw new Error("DOCUMENT_MAX_BYTES must be an integer from 1 to 20000000.");
+  }
+  const signedUrlTtlSeconds = Number(
+    process.env.CLOUDINARY_SIGNED_URL_TTL_SECONDS ?? "300",
+  );
+  if (
+    !Number.isInteger(signedUrlTtlSeconds) ||
+    signedUrlTtlSeconds < 60 ||
+    signedUrlTtlSeconds > 3_600
+  ) {
+    throw new Error(
+      "CLOUDINARY_SIGNED_URL_TTL_SECONDS must be an integer from 60 to 3600.",
+    );
+  }
   const openRouterTimeoutMs = Number(process.env.OPENROUTER_TIMEOUT_MS ?? "30000");
   if (
     !Number.isInteger(openRouterTimeoutMs) ||

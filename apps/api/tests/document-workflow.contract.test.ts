@@ -7,12 +7,11 @@ const config = {
   DATABASE_URL: "postgresql://app:pass@localhost:5432/flowpilot",
   MIGRATION_URL: "postgresql://migration:pass@localhost:5432/flowpilot",
   REDIS_URL: "redis://localhost:6379",
-  OBJECT_STORAGE_ENDPOINT: "http://localhost:9000",
-  OBJECT_STORAGE_REGION: "us-east-1",
-  OBJECT_STORAGE_BUCKET: "private",
-  OBJECT_STORAGE_ACCESS_KEY: "local-key",
-  OBJECT_STORAGE_SECRET_KEY: "local-secret",
-  OBJECT_STORAGE_PRESIGN_TTL_SECONDS: 300,
+  CLOUDINARY_CLOUD_NAME: "test-cloud",
+  CLOUDINARY_API_KEY: "test-key",
+  CLOUDINARY_API_SECRET: "test-secret",
+  CLOUDINARY_SIGNED_URL_TTL_SECONDS: 300,
+  DOCUMENT_MAX_BYTES: 10_000_000,
   OPENROUTER_API_KEY: "local-key",
   OPENROUTER_MODEL: "approved/model",
   OPENROUTER_TIMEOUT_MS: 30_000,
@@ -118,7 +117,11 @@ function createTestApp() {
           document,
           uploadUrl: "https://storage.example/upload",
           expiresAt: "2026-01-01T00:05:00.000Z",
+          maxUploadBytes: 10_000_000,
         };
+      },
+      async uploadDocument() {
+        return { ...document, status: "validating" as const };
       },
       async completeUpload() {
         return { ...document, status: "validating" as const };

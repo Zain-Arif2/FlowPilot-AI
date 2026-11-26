@@ -44,8 +44,11 @@ interface DocumentRow {
   textCharacterCount: number | null;
   status: "uploading" | "validating" | "ready" | "failed" | "deleting";
   failureCode: string | null;
-  sourceObjectKey: string;
-  textObjectKey: string | null;
+  sourcePublicId: string;
+  sourceResourceType: string;
+  sourceDeliveryType: string;
+  sourceFormat: string;
+  textPublicId: string | null;
   checksum: string | null;
   createdAt: Date;
 }
@@ -132,7 +135,10 @@ interface ExecutionArtifactRow {
   workspaceId: string;
   executionId: string;
   sourceDocumentId: string | null;
-  objectKey: string;
+  publicId: string;
+  resourceType: string;
+  deliveryType: string;
+  format: string;
 }
 
 interface OutboxEventRow {
@@ -168,8 +174,11 @@ function createInMemoryDeletionHarness() {
       textCharacterCount: sensitiveDocumentText.length,
       status: "ready",
       failureCode: null,
-      sourceObjectKey: sourceKey,
-      textObjectKey: textKey,
+      sourcePublicId: sourceKey,
+      sourceResourceType: "raw",
+      sourceDeliveryType: "authenticated",
+      sourceFormat: "pdf",
+      textPublicId: textKey,
       checksum: "sha256-test",
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
     },
@@ -303,14 +312,20 @@ function createInMemoryDeletionHarness() {
       workspaceId,
       executionId: waitingExecutionId,
       sourceDocumentId: documentId,
-      objectKey: artifactKeyOne,
+      publicId: artifactKeyOne,
+      resourceType: "raw",
+      deliveryType: "authenticated",
+      format: "json",
     },
     {
       id: "00000000-0000-4000-8000-000000000112",
       workspaceId,
       executionId: completedExecutionId,
       sourceDocumentId: documentId,
-      objectKey: artifactKeyTwo,
+      publicId: artifactKeyTwo,
+      resourceType: "raw",
+      deliveryType: "authenticated",
+      format: "json",
     },
   ];
   const outboxEvents: OutboxEventRow[] = [];
@@ -709,6 +724,13 @@ function createInMemoryDeletionHarness() {
     async headObject() {
       return null;
     },
+    async uploadAsset(_input: unknown) {
+      throw new Error("Not used in deletion test.");
+    },
+    async inspectAsset(_ref: unknown) {
+      return null;
+    },
+    async deleteAsset(_ref: unknown) {},
     async deletePrefix(prefix: string) {
       for (const key of [...objectStore.keys()]) {
         if (key.startsWith(prefix)) objectStore.delete(key);
@@ -787,17 +809,17 @@ describe("document deletion integration", () => {
       context,
       documentId,
     );
-    expect(artifacts.map((item) => item.objectKey)).toEqual([
+    expect(artifacts.map((item) => item.publicId)).toEqual([
       harness.artifactKeyOne,
       harness.artifactKeyTwo,
     ]);
     for (const artifact of artifacts) {
-      await harness.storage.deleteObject(artifact.objectKey);
+      await harness.storage.deleteObject(artifact.publicId);
     }
     await artifactRepo.deleteForExecution(context, waitingExecutionId);
     await artifactRepo.deleteForExecution(context, completedExecutionId);
     await harness.storage.deletePrefix(
-      `workspaces/${workspaceId}/documents/${documentId}/`,
+      `flowpilot/workspaces/${workspaceId}/documents/${documentId}/`,
     );
     await documentRepo.completeDeletion(context, documentId);
 

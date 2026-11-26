@@ -336,7 +336,12 @@ export function createExecutionRepository(client: PrismaClient) {
         readonly executionStepId: string;
         readonly attemptId: string;
         readonly sourceDocumentId: string;
-        readonly objectKey: string;
+        readonly asset: {
+          readonly publicId: string;
+          readonly resourceType: string;
+          readonly deliveryType: string;
+          readonly format: string;
+        };
         readonly elapsedMs: number;
       },
     ): Promise<boolean> {
@@ -387,10 +392,16 @@ export function createExecutionRepository(client: PrismaClient) {
             executionId: input.executionId,
             executionStepId: input.executionStepId,
             sourceDocumentId: input.sourceDocumentId,
-            objectKey: input.objectKey,
+            publicId: input.asset.publicId,
+            resourceType: input.asset.resourceType,
+            deliveryType: input.asset.deliveryType,
+            format: input.asset.format,
           },
           update: {
-            objectKey: input.objectKey,
+            publicId: input.asset.publicId,
+            resourceType: input.asset.resourceType,
+            deliveryType: input.asset.deliveryType,
+            format: input.asset.format,
             sourceDocumentId: input.sourceDocumentId,
           },
         });
@@ -438,7 +449,12 @@ export function createExecutionRepository(client: PrismaClient) {
         readonly targetReportId: string;
         readonly sourceDocumentId: string;
         readonly proposedContent: Prisma.InputJsonValue;
-        readonly objectKey: string;
+        readonly asset: {
+          readonly publicId: string;
+          readonly resourceType: string;
+          readonly deliveryType: string;
+          readonly format: string;
+        };
       },
     ) {
       return withTenantTransaction(client, context, async (transaction) => {
@@ -518,10 +534,16 @@ export function createExecutionRepository(client: PrismaClient) {
             executionId: input.executionId,
             executionStepId: input.executionStepId,
             sourceDocumentId: input.sourceDocumentId,
-            objectKey: input.objectKey,
+            publicId: input.asset.publicId,
+            resourceType: input.asset.resourceType,
+            deliveryType: input.asset.deliveryType,
+            format: input.asset.format,
           },
           update: {
-            objectKey: input.objectKey,
+            publicId: input.asset.publicId,
+            resourceType: input.asset.resourceType,
+            deliveryType: input.asset.deliveryType,
+            format: input.asset.format,
             sourceDocumentId: input.sourceDocumentId,
           },
         });

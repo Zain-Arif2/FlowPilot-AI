@@ -10,14 +10,16 @@ import {
 import {
   createOpenRouterAdapter,
   OpenRouterError,
+  type OpenRouterConfig,
 } from "../src/adapters/openrouter.js";
 import { createRedactedLogger } from "../src/middleware/logger.js";
 
-const config = {
+// OpenRouterConfig fixture used for adapter tests — does not include
+// full AppConfig fields like DATABASE_URL that are irrelevant here.
+const openRouterConfig: OpenRouterConfig = {
   apiKey: "test-key",
   model: "test/model",
-  timeoutMs: 1_000,
-  baseUrl: "https://router.example",
+  timeoutMs: 30_000,
 };
 
 describe("adapter boundaries", () => {
@@ -62,7 +64,7 @@ describe("adapter boundaries", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       );
     };
-    const adapter = createOpenRouterAdapter(config, fetcher);
+    const adapter = createOpenRouterAdapter(openRouterConfig, fetcher);
     const result = await adapter.requestStructuredOutput({
       schemaName: "summary",
       jsonSchema: { type: "object" },
@@ -73,7 +75,7 @@ describe("adapter boundaries", () => {
 
     expect(result.summary).toBe("done");
     expect(requestBody).toMatchObject({
-      model: config.model,
+      model: openRouterConfig.model,
       response_format: {
         type: "json_schema",
         json_schema: { strict: true, name: "summary" },
@@ -84,7 +86,7 @@ describe("adapter boundaries", () => {
 
   it("aborts and maps timeouts to PROVIDER_UNAVAILABLE", async () => {
     const timedOut = createOpenRouterAdapter(
-      { ...config, timeoutMs: 10 },
+      { ...openRouterConfig, timeoutMs: 10 },
       (_input, init) =>
         new Promise((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => {
@@ -106,7 +108,7 @@ describe("adapter boundaries", () => {
 
   it("maps provider and structured-output failures without exposing provider bodies", async () => {
     const unavailable = createOpenRouterAdapter(
-      config,
+      openRouterConfig,
       async () => new Response("private provider response", { status: 503 }),
     );
     await expect(
@@ -120,7 +122,7 @@ describe("adapter boundaries", () => {
     ).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
 
     const rateLimited = createOpenRouterAdapter(
-      config,
+      openRouterConfig,
       async () => new Response("private provider response", { status: 429 }),
     );
     await expect(
@@ -134,7 +136,7 @@ describe("adapter boundaries", () => {
     ).rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
 
     const invalid = createOpenRouterAdapter(
-      config,
+      openRouterConfig,
       async () =>
         new Response(
           JSON.stringify({

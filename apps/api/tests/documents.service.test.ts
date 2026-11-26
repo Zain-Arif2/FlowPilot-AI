@@ -17,8 +17,17 @@ function createRepositoryMock() {
     originalName: "contract.pdf",
     mediaType: "pdf" as const,
     byteSize: 1024,
-    sourceObjectKey: `workspaces/${workspaceId}/documents/${documentId}/source/key`,
-    textObjectKey: null,
+    sourcePublicId: `flowpilot/workspaces/${workspaceId}/documents/${documentId}/source/contract.pdf`,
+    sourceResourceType: "raw",
+    sourceDeliveryType: "authenticated",
+    sourceFormat: "pdf",
+    sourceAssetId: null,
+    sourceVersion: null,
+    sourceUploadedAt: null,
+    textPublicId: null,
+    textResourceType: null,
+    textDeliveryType: null,
+    textFormat: null,
     checksum: null,
     pageCount: null,
     textCharacterCount: null,
@@ -35,6 +44,8 @@ function createRepositoryMock() {
     markValidatingAndEnqueue: vi.fn(async () => ({ ...baseDoc, status: "validating" as const })),
     markFailed: vi.fn(async () => true),
     markReady: vi.fn(async () => true),
+    markRetrying: vi.fn(async () => true),
+    markUploaded: vi.fn(async () => true),
     markDeleting: vi.fn(async () => true),
     listArtifactsForDocument: vi.fn(async () => []),
     completeDeletion: vi.fn(async () => {}),
@@ -42,17 +53,30 @@ function createRepositoryMock() {
 }
 
 describe("createDocumentService", () => {
-  it("creates upload intent and completes upload when storage metadata matches", async () => {
+  it("creates upload intent and returns an internal upload URL with maxUploadBytes", async () => {
     const repo = createRepositoryMock();
     const storage = {
-      createUploadUrl: vi.fn(async () => ({
-        url: "https://storage.example/upload",
-        expiresAt: new Date("2026-01-01T00:05:00.000Z"),
+      uploadAsset: vi.fn(async () => ({
+        assetId: "asset-id-123",
+        version: 1,
+        bytes: 1024,
+        format: "pdf",
+        etag: "etag-abc",
+        publicId: "flowpilot/workspaces/ws-1/documents/doc-1/source",
+        resourceType: "raw" as const,
+        deliveryType: "authenticated" as const,
       })),
-      headObject: vi.fn(async () => ({
-        byteSize: 1024,
-        mediaType: "application/pdf",
+      inspectAsset: vi.fn(async () => ({
+        assetId: "asset-id-123",
+        version: 1,
+        bytes: 1024,
+        format: "pdf",
+        etag: "etag-abc",
+        publicId: "flowpilot/workspaces/ws-1/documents/doc-1/source",
+        resourceType: "raw" as const,
+        deliveryType: "authenticated" as const,
       })),
+      deleteAsset: vi.fn(async () => {}),
     };
     const service = createDocumentService(repo, storage);
 
@@ -61,29 +85,35 @@ describe("createDocumentService", () => {
       mediaType: "application/pdf",
       byteSize: 1024,
     });
-    expect(intent.uploadUrl).toBe("https://storage.example/upload");
+    expect(intent.uploadUrl).toContain("/documents/");
     expect(intent.document.status).toBe("uploading");
-
-    const completed = await service.completeUpload(userId, workspaceId, documentId);
-    expect(completed.status).toBe("validating");
-    expect(repo.markValidatingAndEnqueue).toHaveBeenCalledOnce();
+    expect(intent.maxUploadBytes).toBeGreaterThan(0);
   });
 
-  it("marks document failed and throws 503 when object storage fails during upload intent", async () => {
+  it("marks document failed and throws 503 when object storage fails during uploadDocument", async () => {
     const repo = createRepositoryMock();
     const storage = {
-      createUploadUrl: vi.fn(async () => {
+      uploadAsset: vi.fn(async () => {
         throw new ObjectStorageError("STORAGE_UNAVAILABLE", new Error("ECONNREFUSED"));
       }),
-      headObject: vi.fn(async () => null),
+      inspectAsset: vi.fn(async () => null),
+      deleteAsset: vi.fn(async () => {}),
     };
     const service = createDocumentService(repo, storage);
 
+    // Build a 1024-byte buffer with a valid PDF signature so it passes
+    // assertDocumentBytes before reaching the storage layer.
+    const pdfBytes = new Uint8Array(1024);
+    pdfBytes[0] = 0x25; // %
+    pdfBytes[1] = 0x50; // P
+    pdfBytes[2] = 0x44; // D
+    pdfBytes[3] = 0x46; // F
+    pdfBytes[4] = 0x2d; // -  (completes the %PDF- header signature)
+
     await expect(
-      service.createUploadIntent(userId, workspaceId, {
-        filename: "contract.pdf",
-        mediaType: "application/pdf",
-        byteSize: 1024,
+      service.uploadDocument(userId, workspaceId, documentId, {
+        bytes: pdfBytes,
+        contentType: "application/pdf",
       }),
     ).rejects.toMatchObject({
       status: 503,
@@ -100,8 +130,9 @@ describe("createDocumentService", () => {
   it("requests deletion for an owned document and throws 404 when missing", async () => {
     const repo = createRepositoryMock();
     const storage = {
-      createUploadUrl: vi.fn(),
-      headObject: vi.fn(),
+      uploadAsset: vi.fn(),
+      inspectAsset: vi.fn(),
+      deleteAsset: vi.fn(),
     };
     const service = createDocumentService(repo, storage);
 
@@ -119,4 +150,3 @@ describe("createDocumentService", () => {
     ).rejects.toBeInstanceOf(HttpError);
   });
 });
-

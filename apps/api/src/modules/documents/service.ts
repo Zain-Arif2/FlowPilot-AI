@@ -170,7 +170,7 @@ export function createDocumentService(
 
       return DocumentUploadIntentSchema.parse({
         document: toDocumentDto(document),
-        uploadUrl: `/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(document.id)}/upload`,
+        uploadUrl: `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(document.id)}/upload`,
         expiresAt: new Date(
           Date.now() + UPLOAD_INTENT_TTL_SECONDS * 1_000,
         ).toISOString(),

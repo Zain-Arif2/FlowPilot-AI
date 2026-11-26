@@ -1,5 +1,6 @@
 import type { RequestHandler } from "express";
 import { parse as parseCookies } from "cookie";
+import { recordRequestTiming } from "@flowpilot/db";
 import { HttpError } from "../errors/api-error.js";
 
 export interface AuthenticatedUser {
@@ -22,7 +23,13 @@ export function createJwtAuthentication(
       return;
     }
 
-    const user = await verifyAccessToken(rawToken);
+    const startedAt = performance.now();
+    let user: AuthenticatedUser | null;
+    try {
+      user = await verifyAccessToken(rawToken);
+    } finally {
+      recordRequestTiming("authDurationMs", performance.now() - startedAt);
+    }
     if (!user) {
       next(new HttpError(401, "UNAUTHENTICATED", "Sign-in is required."));
       return;

@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@flowpilot/db/client";
 import type { TenantContext } from "../tenant-transaction.js";
 import { withTenantTransaction } from "../tenant-transaction.js";
+import { measureDatabaseQuery } from "../query-metrics.js";
 
 const RETRYABLE_ERROR_CODES = new Set([
   "AI_PROVIDER_UNAVAILABLE",
+  "AI_PROVIDER_RATE_LIMITED",
   "DEPENDENCY_UNAVAILABLE",
 ]);
 const RETRYABLE_ACTION_TYPES = new Set([
@@ -40,18 +42,20 @@ export function createExecutionHistoryRepository(client: PrismaClient) {
   return {
     list(context: TenantContext) {
       return withTenantTransaction(client, context, (transaction) =>
-        transaction.execution.findMany({
-          where: { workspaceId: context.workspaceId },
-          orderBy: { createdAt: "desc" },
-          take: 100,
-          select: {
-            id: true,
-            workflowId: true,
-            status: true,
-            createdAt: true,
-            errorCode: true,
-          },
-        }),
+        measureDatabaseQuery(() =>
+          transaction.execution.findMany({
+            where: { workspaceId: context.workspaceId },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+            select: {
+              id: true,
+              workflowId: true,
+              status: true,
+              createdAt: true,
+              errorCode: true,
+            },
+          }),
+        ),
       );
     },
 

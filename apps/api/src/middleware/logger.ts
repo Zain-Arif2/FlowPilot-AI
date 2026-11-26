@@ -1,5 +1,6 @@
 import pino from "pino";
 import type { RequestHandler } from "express";
+import { getRequestMetrics } from "./request-context.js";
 
 const REDACTED_FIELDS = [
   "req.headers.authorization",
@@ -38,6 +39,7 @@ export function createRequestLogger(): RequestHandler {
     const startedAt = performance.now();
     response.once("finish", () => {
       const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
+      const metrics = getRequestMetrics(response);
       apiLogger.info(
         {
           requestId: response.getHeader("X-Request-Id"),
@@ -46,6 +48,15 @@ export function createRequestLogger(): RequestHandler {
           statusCode: response.statusCode,
           durationMs,
           workspaceId: request.workspaceContext?.workspaceId,
+          ...(process.env.NODE_ENV !== "production" && metrics
+            ? {
+                authDurationMs: Math.round(metrics.authDurationMs),
+                tenantAuthDurationMs: Math.round(metrics.tenantAuthDurationMs),
+                dbQueryCount: metrics.dbQueryCount,
+                dbQueryDurationMs: Math.round(metrics.dbQueryDurationMs),
+                dbQueryMaxMs: Math.round(metrics.dbQueryMaxMs),
+              }
+            : {}),
         },
         "API request completed",
       );

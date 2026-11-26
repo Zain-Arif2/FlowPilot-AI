@@ -42,6 +42,7 @@ function createHarness() {
     revokedAt: Date | null;
     replacedBy: string | null;
   }> = [];
+  const transactionOptions: Array<{ timeout?: number }> = [];
 
   const tx = {
     user: {
@@ -113,7 +114,11 @@ function createHarness() {
   };
 
   const prisma = {
-    async $transaction<T>(fn: (transaction: typeof tx) => Promise<T>) {
+    async $transaction<T>(
+      fn: (transaction: typeof tx) => Promise<T>,
+      options?: { timeout?: number },
+    ) {
+      if (options) transactionOptions.push(options);
       return fn(tx);
     },
     user: {
@@ -145,6 +150,7 @@ function createHarness() {
     service,
     passwordHasher,
     refreshTokens,
+    transactionOptions,
     advanceSeconds(seconds: number) {
       currentTime = new Date(currentTime.getTime() + seconds * 1_000);
     },
@@ -233,6 +239,7 @@ describe("JWT authentication service", () => {
     harness.advanceSeconds(60);
     const rotated = await harness.service.refresh(initial.refreshToken);
     expect(rotated).not.toBeNull();
+    expect(harness.transactionOptions).toEqual([{ timeout: 20_000 }]);
     expect(rotated?.refreshToken).not.toBe(initial.refreshToken);
     expect(harness.refreshTokens).toHaveLength(2);
     expect(harness.refreshTokens[0]?.revokedAt).not.toBeNull();

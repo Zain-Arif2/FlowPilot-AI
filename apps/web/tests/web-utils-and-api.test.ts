@@ -7,6 +7,7 @@ import {
   getErrorMessage,
 } from "../src/lib/api.js";
 import { cn, formatBytes, formatRelativeDate } from "../src/lib/utils.js";
+import { getExecutionFailureMessage } from "../src/features/executions/failure-message.js";
 
 describe("web utility helpers", () => {
   it("merges Tailwind classes cleanly", () => {
@@ -22,6 +23,18 @@ describe("web utility helpers", () => {
   it("handles invalid dates gracefully", () => {
     expect(formatRelativeDate("not-a-date")).toBe("not-a-date");
     expect(formatRelativeDate("2026-11-25T12:00:00.000Z")).toBeTruthy();
+  });
+
+  it("explains rate-limited and otherwise failed execution steps", () => {
+    expect(getExecutionFailureMessage("AI_PROVIDER_RATE_LIMITED")).toContain(
+      "rate-limited",
+    );
+    expect(getExecutionFailureMessage("UNKNOWN_FAILURE")).toContain(
+      "This step failed.",
+    );
+    expect(getExecutionFailureMessage(undefined)).toContain(
+      "without an error code",
+    );
   });
 });
 
@@ -77,14 +90,38 @@ describe("API client helpers", () => {
     });
   });
 
-  it("resolves void requests on 204 No Content", async () => {
+  it.each([202, 204])("resolves void requests on %s with no content", async (status) => {
     globalThis.fetch = vi
       .fn()
-      .mockResolvedValue(new Response(null, { status: 204 }));
+      .mockResolvedValue(new Response(null, { status }));
 
     await expect(
       apiRequestVoid("/documents/1", { method: "DELETE" }),
     ).resolves.toBeUndefined();
+  });
+
+  it("preserves structured API errors for void requests", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "NOT_FOUND",
+            message: "Document was not found.",
+            requestId: "req-delete-1",
+          },
+        }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      apiRequestVoid("/workspaces/1/documents/1", { method: "DELETE" }),
+    ).rejects.toMatchObject({
+      name: "ApiRequestError",
+      status: 404,
+      code: "NOT_FOUND",
+      message: "Document was not found.",
+    });
   });
 
   it("returns safe user-facing error messages", () => {

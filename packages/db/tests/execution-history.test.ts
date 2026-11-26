@@ -7,6 +7,14 @@ describe("manual execution retry eligibility", () => {
       isManualRetryEligible({
         actionType: "analyze_document",
         attemptNumber: 4,
+        errorCode: "AI_PROVIDER_RATE_LIMITED",
+        status: "failed",
+      }),
+    ).toBe(true);
+    expect(
+      isManualRetryEligible({
+        actionType: "analyze_document",
+        attemptNumber: 4,
         errorCode: "DEPENDENCY_UNAVAILABLE",
         status: "failed",
       }),

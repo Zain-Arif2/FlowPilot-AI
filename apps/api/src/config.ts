@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertOpenRouterPrivacySettings } from "@flowpilot/shared/ai/openrouter";
 import { RedisUrlSchema } from "@flowpilot/shared/redis";
 
 const EnvironmentSchema = z
@@ -26,6 +27,14 @@ const EnvironmentSchema = z
       .default(10_000_000),
     OPENROUTER_API_KEY: z.string().min(1),
     OPENROUTER_MODEL: z.string().min(1),
+    OPENROUTER_ALLOW_NON_ZDR: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+    OPENROUTER_ALLOW_DATA_COLLECTION: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     OPENROUTER_TIMEOUT_MS: z.coerce
       .number()
       .int()
@@ -65,7 +74,14 @@ const EnvironmentSchema = z
     message: "JWT_REFRESH_SECRET must be distinct from JWT_ACCESS_SECRET.",
   });
 
-export type AppConfig = z.infer<typeof EnvironmentSchema>;
+type ParsedAppConfig = z.infer<typeof EnvironmentSchema>;
+export type AppConfig = Omit<
+  ParsedAppConfig,
+  "OPENROUTER_ALLOW_NON_ZDR" | "OPENROUTER_ALLOW_DATA_COLLECTION"
+> & {
+  readonly OPENROUTER_ALLOW_NON_ZDR?: boolean;
+  readonly OPENROUTER_ALLOW_DATA_COLLECTION?: boolean;
+};
 
 export interface AuthCookieNames {
   readonly accessCookieName: string;
@@ -93,5 +109,11 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       .join(", ");
     throw new Error(`Invalid application environment configuration: ${invalidKeys}`);
   }
+  assertOpenRouterPrivacySettings({
+    model: parsed.data.OPENROUTER_MODEL,
+    allowNonZdr: parsed.data.OPENROUTER_ALLOW_NON_ZDR,
+    allowDataCollectionFallback: parsed.data.OPENROUTER_ALLOW_DATA_COLLECTION,
+    nodeEnv: environment.NODE_ENV,
+  });
   return parsed.data;
 }

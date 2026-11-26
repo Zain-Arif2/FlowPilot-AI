@@ -5,7 +5,11 @@ import {
   createReportRepository,
   createWorkspaceRepository,
 } from "@flowpilot/db/repositories";
-import { createOpenRouterAdapter } from "@flowpilot/shared/ai/openrouter";
+import {
+  assertOpenRouterPrivacySettings,
+  createOpenRouterAdapter,
+  parseOpenRouterAllowNonZdr,
+} from "@flowpilot/shared/ai/openrouter";
 import { parseRedisUrl, waitForRedisReadyAndPing } from "@flowpilot/shared/redis";
 import { prisma } from "@flowpilot/db/client";
 import { createWorkerObjectStorage } from "./adapters/object-storage.js";
@@ -63,6 +67,20 @@ export async function startWorkerFoundation(): Promise<void> {
   ) {
     throw new Error("OPENROUTER_TIMEOUT_MS must be an integer from 1000 to 120000.");
   }
+  const openRouterModel = required("OPENROUTER_MODEL");
+  const allowNonZdr = parseOpenRouterAllowNonZdr(
+    process.env.OPENROUTER_ALLOW_NON_ZDR,
+  );
+  const allowDataCollectionFallback = parseOpenRouterAllowNonZdr(
+    process.env.OPENROUTER_ALLOW_DATA_COLLECTION,
+    "OPENROUTER_ALLOW_DATA_COLLECTION",
+  );
+  assertOpenRouterPrivacySettings({
+    model: openRouterModel,
+    allowNonZdr,
+    allowDataCollectionFallback,
+    nodeEnv: process.env.NODE_ENV,
+  });
   const redisUrl = required("REDIS_URL");
   const redisTarget = parseRedisUrl(redisUrl);
   await prisma.$connect();
@@ -107,6 +125,16 @@ export async function startWorkerFoundation(): Promise<void> {
   const documents = createDocumentRepository(prisma);
   const executions = createExecutionRepository(prisma);
   const artifacts = createExecutionArtifactRepository(prisma);
+  workerLogger.info(
+    { model: openRouterModel },
+    "OpenRouter model configured for document analysis",
+  );
+  if (allowDataCollectionFallback) {
+    workerLogger.warn(
+      { model: openRouterModel },
+      "Development-only OpenRouter data collection fallback is enabled",
+    );
+  }
   const workflowProcessor = createWorkflowExecutionProcessor({
     executions,
     documents,
@@ -115,8 +143,15 @@ export async function startWorkerFoundation(): Promise<void> {
     storage,
     analysisClient: createOpenRouterAdapter({
       apiKey: required("OPENROUTER_API_KEY"),
-      model: required("OPENROUTER_MODEL"),
+      model: openRouterModel,
       timeoutMs: openRouterTimeoutMs,
+      allowNonZdr,
+      allowDataCollectionFallback,
+      onDataCollectionFallback: () =>
+        workerLogger.warn(
+          { model: openRouterModel, dataCollection: "allow" },
+          "Development-only OpenRouter data collection fallback used",
+        ),
     }),
   });
   const outboxWorker = createOutboxWorker(

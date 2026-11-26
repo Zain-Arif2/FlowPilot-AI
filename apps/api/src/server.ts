@@ -75,11 +75,29 @@ try {
   throw error;
 }
 const objectStorage = createObjectStorage(config);
+apiLogger.info(
+  { model: config.OPENROUTER_MODEL },
+  "OpenRouter model configured for workflow generation",
+);
+if (config.OPENROUTER_ALLOW_DATA_COLLECTION ?? false) {
+  apiLogger.warn(
+    { model: config.OPENROUTER_MODEL },
+    "Development-only OpenRouter data collection fallback is enabled",
+  );
+}
 const workflowProposalService = createWorkflowProposalService(
   createOpenRouterAdapter({
     apiKey: config.OPENROUTER_API_KEY,
     model: config.OPENROUTER_MODEL,
     timeoutMs: config.OPENROUTER_TIMEOUT_MS,
+    allowNonZdr: config.OPENROUTER_ALLOW_NON_ZDR ?? false,
+    allowDataCollectionFallback:
+      config.OPENROUTER_ALLOW_DATA_COLLECTION ?? false,
+    onDataCollectionFallback: () =>
+      apiLogger.warn(
+        { model: config.OPENROUTER_MODEL, dataCollection: "allow" },
+        "Development-only OpenRouter data collection fallback used",
+      ),
   }),
   createDocumentRepository(prisma),
 );

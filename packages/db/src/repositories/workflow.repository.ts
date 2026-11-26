@@ -1,15 +1,18 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { TenantContext } from "../tenant-transaction.js";
 import { withTenantTransaction } from "../tenant-transaction.js";
+import { measureDatabaseQuery } from "../query-metrics.js";
 
 export function createWorkflowRepository(client: PrismaClient) {
   return {
     list(context: TenantContext) {
       return withTenantTransaction(client, context, (transaction) =>
-        transaction.workflow.findMany({
-          where: { workspaceId: context.workspaceId, status: "active" },
-          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        }),
+        measureDatabaseQuery(() =>
+          transaction.workflow.findMany({
+            where: { workspaceId: context.workspaceId, status: "active" },
+            orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          }),
+        ),
       );
     },
 

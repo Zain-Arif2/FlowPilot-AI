@@ -4,15 +4,18 @@ import {
   withTenantTransaction,
   withUserTransaction,
 } from "../tenant-transaction.js";
+import { measureDatabaseQuery } from "../query-metrics.js";
 
 export function createWorkspaceRepository(client: PrismaClient) {
   return {
     listOwned(userId: string) {
       return withUserTransaction(client, userId, (transaction) =>
-        transaction.workspace.findMany({
-          where: { ownerId: userId },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        }),
+        measureDatabaseQuery(() =>
+          transaction.workspace.findMany({
+            where: { ownerId: userId },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          }),
+        ),
       );
     },
 
@@ -48,16 +51,12 @@ export function createWorkspaceRepository(client: PrismaClient) {
 
     async isOwner(userId: string, workspaceId: string): Promise<boolean> {
       try {
-        const workspace = await withTenantTransaction(
+        await withTenantTransaction(
           client,
           { userId, workspaceId },
-          (transaction) =>
-            transaction.workspace.findFirst({
-              where: { id: workspaceId, ownerId: userId },
-              select: { id: true },
-            }),
+          async () => {},
         );
-        return workspace !== null;
+        return true;
       } catch (error) {
         if (error instanceof TenantAccessError) return false;
         throw error;

@@ -1,15 +1,18 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { TenantContext } from "../tenant-transaction.js";
 import { withTenantTransaction } from "../tenant-transaction.js";
+import { measureDatabaseQuery } from "../query-metrics.js";
 
 export function createReportRepository(client: PrismaClient) {
   return {
     list(context: TenantContext) {
       return withTenantTransaction(client, context, (transaction) =>
-        transaction.report.findMany({
-          where: { workspaceId: context.workspaceId },
-          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-        }),
+        measureDatabaseQuery(() =>
+          transaction.report.findMany({
+            where: { workspaceId: context.workspaceId },
+            orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+          }),
+        ),
       );
     },
 

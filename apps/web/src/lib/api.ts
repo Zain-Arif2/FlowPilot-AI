@@ -132,7 +132,7 @@ export async function apiRequestVoid(
     ...options,
     method: options.method ?? "POST",
   });
-  if (response.status === 204) return;
+  if (response.status === 202 || response.status === 204) return;
   const payload = await readJson(response);
   if (!response.ok) throw responseError(response.status, payload);
   throw new ApiRequestError(

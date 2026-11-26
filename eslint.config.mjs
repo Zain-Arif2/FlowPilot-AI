@@ -6,6 +6,7 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/.next/**",
+      "**/.next-download-verification/**",
       "**/dist/**",
       "**/coverage/**",
       "**/generated/**",

@@ -75,19 +75,32 @@ const report = {
   title: "Contract summary",
   revision: 1,
   content: { summary: "A short summary." },
+  createdAt: "2026-01-01T00:00:00.000Z",
 };
 
 function createTestApp() {
   const app = createApp(config, {
     auth: {
       async register() {
-        return { user: owner, accessToken: "owner-session", refreshToken: "owner-refresh" };
+        return {
+          user: owner,
+          accessToken: "owner-session",
+          refreshToken: "owner-refresh",
+        };
       },
       async login() {
-        return { user: owner, accessToken: "owner-session", refreshToken: "owner-refresh" };
+        return {
+          user: owner,
+          accessToken: "owner-session",
+          refreshToken: "owner-refresh",
+        };
       },
       async refresh() {
-        return { user: owner, accessToken: "owner-session", refreshToken: "owner-refresh" };
+        return {
+          user: owner,
+          accessToken: "owner-session",
+          refreshToken: "owner-refresh",
+        };
       },
       verifyAccessToken(token: string) {
         return token === "owner-session" ? owner : null;
@@ -223,5 +236,6 @@ describe("authenticated document workflow API contracts", () => {
       request(app).get(`/api/v1/workspaces/${workspaceId}/reports/${reportId}`),
     ).expect(200);
     expect(fetched.body.content.summary).toBe("A short summary.");
+    expect(fetched.body.createdAt).toBe(report.createdAt);
   });
 });

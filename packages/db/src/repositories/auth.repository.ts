@@ -1,5 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+const REFRESH_ROTATION_TRANSACTION_OPTIONS = { timeout: 20_000 } as const;
+
 export interface NewRefreshToken {
   readonly id: string;
   readonly familyId: string;
@@ -95,67 +97,70 @@ export function createAuthRepository(client: PrismaClient) {
       };
       readonly now: Date;
     }): Promise<RotateRefreshTokenResult> {
-      return client.$transaction(async (transaction) => {
-        const existing = await transaction.refreshToken.findUnique({
-          where: { tokenHash: input.tokenHash },
-          select: {
-            id: true,
-            userId: true,
-            familyId: true,
-            expiresAt: true,
-            revokedAt: true,
-            replacedBy: true,
-            user: { select: { id: true, email: true } },
-          },
-        });
-        if (!existing) {
-          return { kind: "invalid" };
-        }
-        if (existing.revokedAt !== null || existing.replacedBy !== null) {
-          await transaction.refreshToken.updateMany({
-            where: { familyId: existing.familyId, revokedAt: null },
-            data: { revokedAt: input.now },
+      return client.$transaction(
+        async (transaction) => {
+          const existing = await transaction.refreshToken.findUnique({
+            where: { tokenHash: input.tokenHash },
+            select: {
+              id: true,
+              userId: true,
+              familyId: true,
+              expiresAt: true,
+              revokedAt: true,
+              replacedBy: true,
+              user: { select: { id: true, email: true } },
+            },
           });
-          return { kind: "reused", familyId: existing.familyId };
-        }
-        if (existing.expiresAt <= input.now) {
-          return { kind: "expired" };
-        }
+          if (!existing) {
+            return { kind: "invalid" };
+          }
+          if (existing.revokedAt !== null || existing.replacedBy !== null) {
+            await transaction.refreshToken.updateMany({
+              where: { familyId: existing.familyId, revokedAt: null },
+              data: { revokedAt: input.now },
+            });
+            return { kind: "reused", familyId: existing.familyId };
+          }
+          if (existing.expiresAt <= input.now) {
+            return { kind: "expired" };
+          }
 
-        const claimed = await transaction.refreshToken.updateMany({
-          where: {
-            id: existing.id,
-            revokedAt: null,
-            replacedBy: null,
-          },
-          data: {
-            revokedAt: input.now,
-            replacedBy: input.newToken.id,
-          },
-        });
-        if (claimed.count !== 1) {
-          await transaction.refreshToken.updateMany({
-            where: { familyId: existing.familyId, revokedAt: null },
-            data: { revokedAt: input.now },
+          const claimed = await transaction.refreshToken.updateMany({
+            where: {
+              id: existing.id,
+              revokedAt: null,
+              replacedBy: null,
+            },
+            data: {
+              revokedAt: input.now,
+              replacedBy: input.newToken.id,
+            },
           });
-          return { kind: "reused", familyId: existing.familyId };
-        }
+          if (claimed.count !== 1) {
+            await transaction.refreshToken.updateMany({
+              where: { familyId: existing.familyId, revokedAt: null },
+              data: { revokedAt: input.now },
+            });
+            return { kind: "reused", familyId: existing.familyId };
+          }
 
-        await transaction.refreshToken.create({
-          data: {
-            id: input.newToken.id,
-            userId: existing.userId,
+          await transaction.refreshToken.create({
+            data: {
+              id: input.newToken.id,
+              userId: existing.userId,
+              familyId: existing.familyId,
+              tokenHash: input.newToken.tokenHash,
+              expiresAt: input.newToken.expiresAt,
+            },
+          });
+          return {
+            kind: "rotated",
+            user: existing.user,
             familyId: existing.familyId,
-            tokenHash: input.newToken.tokenHash,
-            expiresAt: input.newToken.expiresAt,
-          },
-        });
-        return {
-          kind: "rotated",
-          user: existing.user,
-          familyId: existing.familyId,
-        };
-      });
+          };
+        },
+        REFRESH_ROTATION_TRANSACTION_OPTIONS,
+      );
     },
 
     async revokeRefreshToken(tokenHash: string, revokedAt: Date): Promise<void> {

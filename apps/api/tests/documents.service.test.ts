@@ -53,7 +53,7 @@ function createRepositoryMock() {
 }
 
 describe("createDocumentService", () => {
-  it("creates upload intent and returns an internal upload URL with maxUploadBytes", async () => {
+  it("creates an upload intent with a URL routed through the Next.js API rewrite", async () => {
     const repo = createRepositoryMock();
     const storage = {
       uploadAsset: vi.fn(async () => ({
@@ -85,9 +85,59 @@ describe("createDocumentService", () => {
       mediaType: "application/pdf",
       byteSize: 1024,
     });
-    expect(intent.uploadUrl).toContain("/documents/");
+    expect(intent.uploadUrl).toMatch(
+      new RegExp(
+        `^/api/v1/workspaces/${workspaceId}/documents/[0-9a-f-]+/upload$`,
+      ),
+    );
     expect(intent.document.status).toBe("uploading");
     expect(intent.maxUploadBytes).toBeGreaterThan(0);
+  });
+
+  it("verifies the Cloudinary upload and enqueues validation", async () => {
+    const repo = createRepositoryMock();
+    const cloudinary = {
+      uploadAsset: vi.fn(async () => ({
+        assetId: "asset-id-123",
+        version: 1,
+        bytes: 1024,
+        format: "pdf",
+        etag: "etag-abc",
+        publicId: repo.baseDoc.sourcePublicId,
+        resourceType: "raw" as const,
+        deliveryType: "authenticated" as const,
+      })),
+      inspectAsset: vi.fn(async () => ({
+        assetId: "asset-id-123",
+        version: 1,
+        bytes: 1024,
+        format: "pdf",
+        etag: "etag-abc",
+        publicId: repo.baseDoc.sourcePublicId,
+        resourceType: "raw" as const,
+        deliveryType: "authenticated" as const,
+      })),
+      deleteAsset: vi.fn(async () => {}),
+    };
+    const service = createDocumentService(repo, cloudinary);
+    const pdfBytes = new Uint8Array(1024);
+    pdfBytes.set([0x25, 0x50, 0x44, 0x46, 0x2d]);
+
+    const document = await service.uploadDocument(
+      userId,
+      workspaceId,
+      documentId,
+      { bytes: pdfBytes, contentType: "application/pdf" },
+    );
+
+    expect(document.status).toBe("validating");
+    expect(cloudinary.uploadAsset).toHaveBeenCalledOnce();
+    expect(cloudinary.inspectAsset).toHaveBeenCalledOnce();
+    expect(repo.markUploaded).toHaveBeenCalledOnce();
+    expect(repo.markValidatingAndEnqueue).toHaveBeenCalledWith(
+      { userId, workspaceId },
+      documentId,
+    );
   });
 
   it("marks document failed and throws 503 when object storage fails during uploadDocument", async () => {

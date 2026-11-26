@@ -2,6 +2,7 @@ import { Prisma, type ApprovalStatus, type PrismaClient } from "@prisma/client";
 import { ReportContentSchema } from "@flowpilot/shared";
 import type { TenantContext } from "../tenant-transaction.js";
 import { withTenantTransaction } from "../tenant-transaction.js";
+import { measureDatabaseQuery } from "../query-metrics.js";
 
 export class ApprovalDecisionError extends Error {
   constructor(readonly reason: "NOT_FOUND" | "NOT_PENDING") {
@@ -18,24 +19,26 @@ export function createApprovalRepository(client: PrismaClient) {
   return {
     list(context: TenantContext, status?: ApprovalStatus) {
       return withTenantTransaction(client, context, (transaction) =>
-        transaction.approval.findMany({
-          where: {
-            workspaceId: context.workspaceId,
-            ...(status ? { status } : {}),
-          },
-          select: {
-            id: true,
-            workspaceId: true,
-            executionId: true,
-            actionType: true,
-            targetReportId: true,
-            expectedReportRevision: true,
-            status: true,
-            requestedAt: true,
-            decidedAt: true,
-          },
-          orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
-        }),
+        measureDatabaseQuery(() =>
+          transaction.approval.findMany({
+            where: {
+              workspaceId: context.workspaceId,
+              ...(status ? { status } : {}),
+            },
+            select: {
+              id: true,
+              workspaceId: true,
+              executionId: true,
+              actionType: true,
+              targetReportId: true,
+              expectedReportRevision: true,
+              status: true,
+              requestedAt: true,
+              decidedAt: true,
+            },
+            orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
+          }),
+        ),
       );
     },
 

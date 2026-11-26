@@ -61,6 +61,7 @@ interface ReportRow {
   title: string;
   revision: number;
   content: unknown;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -196,6 +197,7 @@ function createInMemoryDeletionHarness() {
         dates: ["2026-02-01"],
         actionItems: [sensitiveActionItem],
       },
+      createdAt: new Date("2026-01-01T00:04:00.000Z"),
       updatedAt: new Date("2026-01-01T00:05:00.000Z"),
     },
   ];

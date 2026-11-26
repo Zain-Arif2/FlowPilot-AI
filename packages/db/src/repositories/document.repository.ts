@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { DocumentMediaType, DocumentStatus, type PrismaClient } from "@prisma/client";
 import type { TenantContext } from "../tenant-transaction.js";
 import { withTenantTransaction } from "../tenant-transaction.js";
+import { measureDatabaseQuery } from "../query-metrics.js";
 
 interface DocumentUploadInput {
   readonly filename: string;
@@ -59,10 +60,12 @@ export function createDocumentRepository(client: PrismaClient) {
 
     list(context: TenantContext) {
       return withTenantTransaction(client, context, (transaction) =>
-        transaction.document.findMany({
-          where: { workspaceId: context.workspaceId },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        }),
+        measureDatabaseQuery(() =>
+          transaction.document.findMany({
+            where: { workspaceId: context.workspaceId },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          }),
+        ),
       );
     },
 

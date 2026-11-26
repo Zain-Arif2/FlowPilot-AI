@@ -32,9 +32,11 @@ import { EmptyState } from "../../components/ui/empty-state.js";
 import { Skeleton } from "../../components/ui/skeleton.js";
 import { useToast } from "../../components/ui/toast.js";
 import { StatusBadge } from "../../components/status-badge.js";
+import { getExecutionFailureMessage } from "./failure-message.js";
 
 const RETRYABLE_ERROR_CODES = new Set([
   "AI_PROVIDER_UNAVAILABLE",
+  "AI_PROVIDER_RATE_LIMITED",
   "DEPENDENCY_UNAVAILABLE",
 ]);
 
@@ -223,7 +225,12 @@ export function ExecutionsView({
               </CardDescription>
             </div>
             {selectedDetail.errorCode ? (
-              <Badge variant="destructive">{selectedDetail.errorCode}</Badge>
+              <div className="flex flex-col items-start gap-1">
+                <Badge variant="destructive">{selectedDetail.errorCode}</Badge>
+                <p className="max-w-sm text-xs text-rose-700" role="alert">
+                  {getExecutionFailureMessage(selectedDetail.errorCode)}
+                </p>
+              </div>
             ) : null}
           </CardHeader>
         </Card>
@@ -276,6 +283,11 @@ export function ExecutionsView({
                             </code>
                           ) : null}
                         </div>
+                        {step.status === "failed" ? (
+                          <p className="pl-7 text-xs text-rose-700" role="alert">
+                            {getExecutionFailureMessage(step.errorCode)}
+                          </p>
+                        ) : null}
                       </div>
 
                       {canRetry ? (

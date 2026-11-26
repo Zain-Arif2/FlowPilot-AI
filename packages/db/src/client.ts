@@ -16,16 +16,18 @@ function getApplicationDatabaseUrl(): string {
   return databaseUrl;
 }
 
+function createPrismaClient() {
+  return new PrismaClient({
+    datasources: { db: { url: getApplicationDatabaseUrl() } },
+    log: ["error"],
+  });
+}
+
 const globalForPrisma = globalThis as typeof globalThis & {
-  flowPilotPrisma?: PrismaClient;
+  flowPilotPrisma?: ReturnType<typeof createPrismaClient>;
 };
 
-export const prisma =
-  globalForPrisma.flowPilotPrisma ??
-  new PrismaClient({
-    datasources: { db: { url: getApplicationDatabaseUrl() } },
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
+export const prisma = globalForPrisma.flowPilotPrisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.flowPilotPrisma = prisma;

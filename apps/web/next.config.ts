@@ -5,6 +5,7 @@ const apiOrigin = process.env.API_INTERNAL_URL ?? "http://localhost:3001";
 const workspaceRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 const nextConfig: NextConfig = {
+  distDir: process.env.FLOWPILOT_NEXT_DIST_DIR ?? ".next",
   transpilePackages: ["@flowpilot/shared"],
   outputFileTracingRoot: workspaceRoot,
   async rewrites() {

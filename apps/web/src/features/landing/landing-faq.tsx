@@ -12,7 +12,7 @@ const FAQS = [
   {
     question: "What document formats and sizes are supported?",
     answer:
-      "FlowPilot AI supports English PDF (up to 100 native pages), DOCX, and UTF-8 TXT files up to 20 MB per file.",
+      "FlowPilot AI supports English PDF (up to 100 native pages), DOCX, and UTF-8 TXT files up to 10 MB per file.",
   },
   {
     question: "Why do report replacements require human approval?",

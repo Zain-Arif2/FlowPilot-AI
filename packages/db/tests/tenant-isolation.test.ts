@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/client.js";
+import { createDocumentRepository } from "../src/repositories/document.repository.js";
 import { withTenantTransaction } from "../src/tenant-transaction.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -43,7 +44,10 @@ beforeAll(async () => {
       originalName: "synthetic.pdf",
       mediaType: "pdf",
       byteSize: 1,
-      sourceObjectKey: `integration/${documentId}`,
+      sourcePublicId: `integration/${documentId}/source.pdf`,
+      sourceResourceType: "raw",
+      sourceDeliveryType: "authenticated",
+      sourceFormat: "pdf",
       checksum: "test-checksum",
     },
   });
@@ -68,6 +72,22 @@ afterAll(async () => {
 });
 
 describe("PostgreSQL tenant isolation", () => {
+  it("lists documents using the migrated Cloudinary storage columns", async () => {
+    const documents = await createDocumentRepository(prisma).list({
+      userId: ownerId,
+      workspaceId: workspaceOneId,
+    });
+
+    expect(documents).toHaveLength(1);
+    expect(documents[0]).toMatchObject({
+      id: documentId,
+      sourcePublicId: `integration/${documentId}/source.pdf`,
+      sourceResourceType: "raw",
+      sourceDeliveryType: "authenticated",
+      sourceFormat: "pdf",
+    });
+  });
+
   it("denies workspace data when tenant context is missing", async () => {
     const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*)::bigint AS count FROM "Document" WHERE "id" = ${documentId}::uuid

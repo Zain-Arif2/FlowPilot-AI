@@ -4,6 +4,7 @@ import { useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
   DocumentSchema,
   DocumentUploadIntentSchema,
+  ReportSchema,
   type DocumentDto,
   type ReportDto,
   type Workspace,
@@ -11,6 +12,7 @@ import {
 import {
   Calendar,
   CheckSquare,
+  Download,
   FileText,
   FileUp,
   FolderOpen,
@@ -33,8 +35,13 @@ import { EmptyState } from "../../components/ui/empty-state.js";
 import { Skeleton } from "../../components/ui/skeleton.js";
 import { useToast } from "../../components/ui/toast.js";
 import { StatusBadge } from "../../components/status-badge.js";
+import {
+  createReportPdf,
+  createReportText,
+  reportFilename,
+} from "./report-download.js";
 
-const MAX_UPLOAD_BYTES = 20_000_000;
+const MAX_UPLOAD_BYTES = 10_000_000;
 
 function mediaTypeFor(file: File): string | null {
   const extension = file.name.split(".").pop()?.toLowerCase();
@@ -76,6 +83,9 @@ export function DocumentsView({
   const [uploading, setUploading] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState<DocumentDto | null>(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
+  const [downloadingReportId, setDownloadingReportId] = useState<string | null>(
+    null,
+  );
   const [activeTab, setActiveTab] = useState<"documents" | "reports">(
     "documents",
   );
@@ -94,11 +104,19 @@ export function DocumentsView({
       });
       return;
     }
-    if (file.size < 1 || file.size > MAX_UPLOAD_BYTES) {
+    if (file.size < 1) {
+      notify({
+        tone: "error",
+        title: "File is empty",
+        description: "Choose a file that contains at least 1 byte.",
+      });
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
       notify({
         tone: "error",
         title: "File too large",
-        description: "Files must be between 1 byte and 20 MB.",
+        description: "This file exceeds the 10 MB upload limit. Choose a smaller file.",
       });
       return;
     }
@@ -191,6 +209,41 @@ export function DocumentsView({
     }
   }
 
+  async function downloadReport(reportId: string, format: "pdf" | "txt") {
+    setDownloadingReportId(reportId);
+    try {
+      const report = await apiRequest(
+        `/workspaces/${encodeURIComponent(workspace.id)}/reports/${encodeURIComponent(reportId)}`,
+        ReportSchema,
+      );
+      const blob =
+        format === "pdf"
+          ? new Blob([createReportPdf(report)], { type: "application/pdf" })
+          : new Blob([createReportText(report)], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = reportFilename(report.title, format);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      notify({
+        tone: "success",
+        title: "Report downloaded",
+        description: `Your ${format.toUpperCase()} report is ready.`,
+      });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: "Report download failed",
+        description: getErrorMessage(error),
+      });
+    } finally {
+      setDownloadingReportId(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       {/* Upload Card */}
@@ -199,7 +252,7 @@ export function DocumentsView({
           <div>
             <CardTitle>Upload document</CardTitle>
             <CardDescription>
-              PDF, DOCX, or TXT up to 20 MB. Stored privately in your workspace.
+              PDF, DOCX, or TXT up to 10 MB. Stored privately in your workspace.
             </CardDescription>
           </div>
           <Button
@@ -473,6 +526,39 @@ export function DocumentsView({
                     </ul>
                   </div>
                 ) : null}
+                <div className="flex flex-wrap justify-end gap-2 border-t border-[#efeff4] pt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={downloadingReportId !== null}
+                    onClick={() => void downloadReport(report.id, "txt")}
+                  >
+                    {downloadingReportId === report.id ? (
+                      <RefreshCw
+                        className="h-3.5 w-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    Download TXT
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={downloadingReportId !== null}
+                    onClick={() => void downloadReport(report.id, "pdf")}
+                  >
+                    {downloadingReportId === report.id ? (
+                      <RefreshCw
+                        className="h-3.5 w-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    Download PDF
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

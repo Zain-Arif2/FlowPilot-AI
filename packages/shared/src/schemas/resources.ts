@@ -109,6 +109,7 @@ export const ReportSchema = z
     title: z.string().min(1).max(120),
     revision: z.number().int().positive(),
     content: ReportContentSchema,
+    createdAt: z.string().datetime(),
   })
   .strict();
 

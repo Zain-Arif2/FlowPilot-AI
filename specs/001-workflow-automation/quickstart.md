@@ -10,10 +10,10 @@ manual verification procedure, not a claim that those steps have passed.
 - Node.js 24 LTS and npm (included with Node.js).
 - A Neon PostgreSQL database, an Upstash Redis database, and a Cloudinary
   account (Free plan or higher) for document and artifact storage.
-- An OpenRouter API key and an approved model/provider configuration (default:
-  `google/gemini-2.5-flash-lite`) that supports strict structured output and
-  zero-retention routing. Automated tests use a mock AI adapter; never put a
-  real key in source control.
+- An OpenRouter API key and a model/provider configuration that supports strict
+  structured output (the documented free default is
+  `baidu/ernie-5.5-flash-preview:free`). Automated tests use a mock AI adapter;
+  never put a real key in source control.
 
 ## Hosted Services
 
@@ -41,6 +41,15 @@ manual verification procedure, not a claim that those steps have passed.
    web origin. Keep `COOKIE_SECURE=false` for local HTTP only; use `true` behind
    HTTPS in deployment (which enables `__Host-` cookie prefixes). Store real
    values only in `.env` or a secret manager.
+   OpenRouter uses `data_collection=deny` and ZDR routing by default. The
+   documented free model was verified with strict structured output, but
+   requires the development-only `OPENROUTER_ALLOW_NON_ZDR=true` setting for
+   its available non-ZDR endpoint. That exception requires a `:free` model,
+   disables ZDR routing, and is refused in production. Keep
+   `OPENROUTER_ALLOW_DATA_COLLECTION=false` unless testing has shown that no
+   free model works with `data_collection=deny`; enabling it may allow the
+   provider to retain request data. Use only synthetic documents when either
+   development exception is enabled.
 6. Install dependencies, generate Prisma Client, apply checked-in migrations,
    and start the web app, API, and worker:
 
@@ -122,7 +131,7 @@ do not use production data:
 
 1. Register a user, create two workspaces, and verify that each workspace is
    visible only to its creator.
-2. Upload a valid PDF, DOCX, or TXT file within 20 MB and 100 pages. Confirm
+2. Upload a valid PDF, DOCX, or TXT file within 10 MB and 100 pages. Confirm
    the upload transitions to `ready`; try an unsupported/corrupt file and
    confirm it is rejected before a run can start.
 3. Describe a document summary task. Inspect and edit the AI-proposed graph in

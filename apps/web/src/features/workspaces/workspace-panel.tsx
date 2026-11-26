@@ -204,6 +204,15 @@ export function WorkspacePanel({
                 </Button>
               </div>
             ) : null}
+            {resources.refreshing ? (
+              <div
+                role="status"
+                aria-label="Refreshing workspace data"
+                className="mx-auto mb-4 max-w-6xl"
+              >
+                <Skeleton className="h-1.5 w-full" />
+              </div>
+            ) : null}
 
             {activeView === "overview" && (
               <DashboardView

@@ -14,13 +14,11 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MarkerType,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
   type Connection,
-  type Edge,
   type EdgeChangeset,
   type NodeChangeset,
 } from "@xyflow/react";
@@ -32,7 +30,6 @@ import {
   connectWorkflowNodes,
   createWorkflowNode,
   removeWorkflowNode,
-  serializeWorkflowBuilder,
   validateWorkflowGraph,
   type DocumentDto,
   type ReportDto,
@@ -63,14 +60,20 @@ import { Dialog } from "../../components/ui/dialog.js";
 import { Input, Label, Select, Textarea } from "../../components/ui/input.js";
 import { Sheet } from "../../components/ui/sheet.js";
 import { useToast } from "../../components/ui/toast.js";
+import {
+  createInitialCanvasState,
+  createInitialWorkflowDefinition,
+  fromCanvas,
+  toCanvasEdges,
+  toCanvasNodes,
+  type CanvasEdge,
+} from "./canvas-graph.js";
 import { NodeConfigPanel } from "./node-config-panel.js";
 import {
   NODE_KIND_META,
   workflowNodeTypes,
   type CanvasNode,
 } from "./workflow-node.js";
-
-type CanvasEdge = Edge;
 
 const PALETTE_KINDS: readonly WorkflowNode["kind"][] = [
   "extract_document",
@@ -79,85 +82,6 @@ const PALETTE_KINDS: readonly WorkflowNode["kind"][] = [
   "replace_report",
   "condition",
 ];
-
-function toCanvasNodes(definition: WorkflowDefinition): CanvasNode[] {
-  return definition.nodes.map((workflowNode) => ({
-    id: workflowNode.id,
-    type: "workflowStep",
-    position: workflowNode.position,
-    data: { workflowNode },
-  }));
-}
-
-function toCanvasEdges(definition: WorkflowDefinition): CanvasEdge[] {
-  return definition.edges.map((workflowEdge) => ({
-    id: workflowEdge.id,
-    source: workflowEdge.source,
-    target: workflowEdge.target,
-    ...(workflowEdge.branch ? { sourceHandle: workflowEdge.branch } : {}),
-    type: "smoothstep",
-    animated: false,
-    style: { stroke: "#7b7896", strokeWidth: 1.75 },
-    label: workflowEdge.branch
-      ? workflowEdge.branch === "true"
-        ? "True"
-        : "False"
-      : undefined,
-    markerEnd: { type: MarkerType.ArrowClosed, color: "#7b7896" },
-  }));
-}
-
-function fromCanvas(
-  nodes: readonly CanvasNode[],
-  edges: readonly CanvasEdge[],
-): WorkflowDefinition {
-  return serializeWorkflowBuilder(
-    nodes.map((node) => ({
-      ...node.data.workflowNode,
-      position: node.position,
-    })),
-    edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      ...(edge.sourceHandle === undefined
-        ? {}
-        : { sourceHandle: edge.sourceHandle }),
-    })),
-  );
-}
-
-function initialDefinition(): WorkflowDefinition {
-  const extract = createWorkflowNode("extract_document", crypto.randomUUID(), {
-    x: 160,
-    y: 40,
-  });
-  const analyze = createWorkflowNode("analyze_document", crypto.randomUUID(), {
-    x: 160,
-    y: 190,
-  });
-  const report = createWorkflowNode("create_report", crypto.randomUUID(), {
-    x: 160,
-    y: 340,
-  });
-  let definition: WorkflowDefinition = {
-    version: 1,
-    nodes: [extract],
-    edges: [],
-  };
-  definition = addWorkflowNode(definition, analyze);
-  definition = addWorkflowNode(definition, report);
-  definition = connectWorkflowNodes(definition, {
-    id: crypto.randomUUID(),
-    source: extract.id,
-    target: analyze.id,
-  });
-  return connectWorkflowNodes(definition, {
-    id: crypto.randomUUID(),
-    source: analyze.id,
-    target: report.id,
-  });
-}
 
 interface WorkflowBuilderInnerProps {
   readonly workspace: Workspace;
@@ -194,12 +118,9 @@ function WorkflowBuilderInner({
   );
   const [workflowName, setWorkflowName] = useState("Document summary workflow");
   const [workflowRevision, setWorkflowRevision] = useState<number | null>(null);
-  const [nodes, setNodes] = useState<CanvasNode[]>(() =>
-    toCanvasNodes(initialDefinition()),
-  );
-  const [edges, setEdges] = useState<CanvasEdge[]>(() =>
-    toCanvasEdges(initialDefinition()),
-  );
+  const [initialCanvasState] = useState(createInitialCanvasState);
+  const [nodes, setNodes] = useState(initialCanvasState.nodes);
+  const [edges, setEdges] = useState(initialCanvasState.edges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
 
@@ -299,7 +220,7 @@ function WorkflowBuilderInner({
     setWorkflowRevision(null);
     setWorkflowName("Untitled workflow");
     setStaleConflict(false);
-    setGraph(initialDefinition());
+    setGraph(createInitialWorkflowDefinition());
   }
 
   function handleNodesChange(changes: NodeChangeset<CanvasNode>) {

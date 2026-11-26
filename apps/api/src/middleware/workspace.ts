@@ -1,9 +1,11 @@
 import type { RequestHandler } from "express";
 import {
   TenantAccessError,
+  withVerifiedWorkspaceOwner,
   withTenantTransaction,
 } from "@flowpilot/db/tenant-transaction";
 import type { PrismaClient } from "@flowpilot/db";
+import { recordRequestTiming } from "@flowpilot/db";
 import { HttpError } from "../errors/api-error.js";
 import { UuidSchema } from "@flowpilot/shared";
 
@@ -34,12 +36,22 @@ export function createWorkspaceAuthorization(
     }
 
     const context = { userId: user.id, workspaceId };
-    if (!(await verifyWorkspace(context))) {
+    const startedAt = performance.now();
+    let authorized: boolean;
+    try {
+      authorized = await verifyWorkspace(context);
+    } finally {
+      recordRequestTiming(
+        "tenantAuthDurationMs",
+        performance.now() - startedAt,
+      );
+    }
+    if (!authorized) {
       next(new HttpError(404, "NOT_FOUND", "Workspace was not found."));
       return;
     }
     request.workspaceContext = context;
-    next();
+    withVerifiedWorkspaceOwner(context, next);
   };
 }
 

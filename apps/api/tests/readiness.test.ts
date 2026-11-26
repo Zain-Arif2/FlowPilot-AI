@@ -14,7 +14,7 @@ const config = readConfig({
   CLOUDINARY_CLOUD_NAME: "test-cloud",
   CLOUDINARY_API_KEY: "test-key",
   CLOUDINARY_API_SECRET: "test-secret",
-  DOCUMENT_MAX_BYTES: "10000000",
+  DOCUMENT_MAX_BYTES: "4000000",
   OPENROUTER_API_KEY: "local-key",
   OPENROUTER_MODEL: "approved/model",
   JWT_ACCESS_SECRET: "test-access-secret-at-least-32-chars-long",

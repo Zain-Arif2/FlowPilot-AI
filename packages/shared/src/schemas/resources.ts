@@ -9,11 +9,9 @@ export const DocumentMediaTypeSchema = z.enum([
 ]);
 
 /**
- * Absolute product ceiling. Cloudinary plan file-size limits can be lower
- * (Free: 10 MB raw files, Plus: 20 MB, Advanced: 40 MB), so the API enforces
- * the configured DOCUMENT_MAX_BYTES value in addition to this schema ceiling.
+ * Absolute product ceiling, kept below Vercel's request-body limit.
  */
-export const DOCUMENT_MAX_BYTES = 20_000_000;
+export const DOCUMENT_MAX_BYTES = 4_000_000;
 
 export const DocumentStatusSchema = z.enum([
   "uploading",

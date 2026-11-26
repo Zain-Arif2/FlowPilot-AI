@@ -47,6 +47,10 @@ export function LandingHero() {
               Explore Features
             </a>
           </div>
+          <p className="mx-auto mt-5 max-w-2xl rounded-lg border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm text-amber-100">
+            Portfolio demo only: do not upload real, confidential, or sensitive
+            documents. Use synthetic sample files only.
+          </p>
         </div>
 
         {/* Product Preview: AI Prompt -> Visual Workflow DAG */}

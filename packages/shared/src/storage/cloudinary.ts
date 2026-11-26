@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 import { UuidSchema } from "../schemas/common.js";
+import { DOCUMENT_MAX_BYTES } from "../schemas/resources.js";
 
 export const CLOUDINARY_RESOURCE_TYPE = "raw" as const;
 export const CLOUDINARY_DELIVERY_TYPE = "authenticated" as const;
 export const CLOUDINARY_PUBLIC_ID_PREFIX = "flowpilot";
 export const DEFAULT_CLOUDINARY_SIGNED_URL_TTL_SECONDS = 300;
-export const DEFAULT_DOCUMENT_MAX_BYTES = 10_000_000;
-export const DOCUMENT_MAX_BYTES_CEILING = 20_000_000;
+export const DEFAULT_DOCUMENT_MAX_BYTES = DOCUMENT_MAX_BYTES;
+export const DOCUMENT_MAX_BYTES_CEILING = DOCUMENT_MAX_BYTES;
 
 export type CloudinaryResourceType = typeof CLOUDINARY_RESOURCE_TYPE;
 export type CloudinaryDeliveryType = typeof CLOUDINARY_DELIVERY_TYPE;

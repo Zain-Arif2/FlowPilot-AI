@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOCUMENT_MAX_BYTES } from "@flowpilot/shared";
 import { assertOpenRouterPrivacySettings } from "@flowpilot/shared/ai/openrouter";
 import { RedisUrlSchema } from "@flowpilot/shared/redis";
 
@@ -23,8 +24,8 @@ const EnvironmentSchema = z
       .number()
       .int()
       .min(1)
-      .max(20_000_000)
-      .default(10_000_000),
+      .max(DOCUMENT_MAX_BYTES)
+      .default(DOCUMENT_MAX_BYTES),
     OPENROUTER_API_KEY: z.string().min(1),
     OPENROUTER_MODEL: z.string().min(1),
     OPENROUTER_ALLOW_NON_ZDR: z
@@ -109,11 +110,17 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       .join(", ");
     throw new Error(`Invalid application environment configuration: ${invalidKeys}`);
   }
+  if (environment.NODE_ENV === "production" && !parsed.data.COOKIE_SECURE) {
+    throw new Error("COOKIE_SECURE must be true when NODE_ENV is production.");
+  }
   assertOpenRouterPrivacySettings({
     model: parsed.data.OPENROUTER_MODEL,
     allowNonZdr: parsed.data.OPENROUTER_ALLOW_NON_ZDR,
     allowDataCollectionFallback: parsed.data.OPENROUTER_ALLOW_DATA_COLLECTION,
     nodeEnv: environment.NODE_ENV,
   });
-  return parsed.data;
+  const port = environment.PORT
+    ? z.coerce.number().int().min(1).max(65_535).parse(environment.PORT)
+    : parsed.data.API_PORT;
+  return { ...parsed.data, API_PORT: port };
 }

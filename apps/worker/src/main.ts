@@ -10,6 +10,7 @@ import {
   createOpenRouterAdapter,
   parseOpenRouterAllowNonZdr,
 } from "@flowpilot/shared/ai/openrouter";
+import { DOCUMENT_MAX_BYTES } from "@flowpilot/shared";
 import { parseRedisUrl, waitForRedisReadyAndPing } from "@flowpilot/shared/redis";
 import { prisma } from "@flowpilot/db/client";
 import { createWorkerObjectStorage } from "./adapters/object-storage.js";
@@ -39,13 +40,17 @@ export async function startWorkerFoundation(): Promise<void> {
     apiKey: required("CLOUDINARY_API_KEY"),
     apiSecret: required("CLOUDINARY_API_SECRET"),
   };
-  const documentMaxBytes = Number(process.env.DOCUMENT_MAX_BYTES ?? "10000000");
+  const documentMaxBytes = Number(
+    process.env.DOCUMENT_MAX_BYTES ?? DOCUMENT_MAX_BYTES,
+  );
   if (
     !Number.isInteger(documentMaxBytes) ||
     documentMaxBytes < 1 ||
-    documentMaxBytes > 20_000_000
+    documentMaxBytes > DOCUMENT_MAX_BYTES
   ) {
-    throw new Error("DOCUMENT_MAX_BYTES must be an integer from 1 to 20000000.");
+    throw new Error(
+      `DOCUMENT_MAX_BYTES must be an integer from 1 to ${DOCUMENT_MAX_BYTES}.`,
+    );
   }
   const signedUrlTtlSeconds = Number(
     process.env.CLOUDINARY_SIGNED_URL_TTL_SECONDS ?? "300",

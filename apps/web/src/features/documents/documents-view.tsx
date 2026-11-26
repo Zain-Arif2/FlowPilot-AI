@@ -4,6 +4,7 @@ import { useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
   DocumentSchema,
   DocumentUploadIntentSchema,
+  DOCUMENT_MAX_BYTES,
   ReportSchema,
   type DocumentDto,
   type ReportDto,
@@ -41,7 +42,7 @@ import {
   reportFilename,
 } from "./report-download.js";
 
-const MAX_UPLOAD_BYTES = 10_000_000;
+const MAX_UPLOAD_BYTES = DOCUMENT_MAX_BYTES;
 
 function mediaTypeFor(file: File): string | null {
   const extension = file.name.split(".").pop()?.toLowerCase();
@@ -116,7 +117,7 @@ export function DocumentsView({
       notify({
         tone: "error",
         title: "File too large",
-        description: "This file exceeds the 10 MB upload limit. Choose a smaller file.",
+        description: "This file exceeds the 4 MB upload limit. Choose a smaller file.",
       });
       return;
     }
@@ -252,7 +253,8 @@ export function DocumentsView({
           <div>
             <CardTitle>Upload document</CardTitle>
             <CardDescription>
-              PDF, DOCX, or TXT up to 10 MB. Stored privately in your workspace.
+              Portfolio demo only: do not upload real, confidential, or sensitive
+              documents. Use synthetic sample files only. PDF, DOCX, or TXT up to 4 MB.
             </CardDescription>
           </div>
           <Button
@@ -582,4 +584,3 @@ export function DocumentsView({
     </div>
   );
 }
-

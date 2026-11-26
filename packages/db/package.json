@@ -10,7 +10,7 @@
     "./repositories": "./src/repositories/index.ts"
   },
   "scripts": {
-    "db:generate": "node --env-file=../../.env scripts/prisma-cli.mjs generate",
+    "db:generate": "node --env-file-if-exists=../../.env scripts/prisma-cli.mjs generate",
     "db:migrate": "node --env-file=../../.env scripts/prisma-cli.mjs migrate dev",
     "db:migrate:deploy": "node --env-file=../../.env scripts/prisma-cli.mjs migrate deploy",
     "typecheck": "tsc --noEmit"

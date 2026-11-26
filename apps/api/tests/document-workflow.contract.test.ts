@@ -11,7 +11,7 @@ const config = {
   CLOUDINARY_API_KEY: "test-key",
   CLOUDINARY_API_SECRET: "test-secret",
   CLOUDINARY_SIGNED_URL_TTL_SECONDS: 300,
-  DOCUMENT_MAX_BYTES: 10_000_000,
+  DOCUMENT_MAX_BYTES: 4_000_000,
   OPENROUTER_API_KEY: "local-key",
   OPENROUTER_MODEL: "approved/model",
   OPENROUTER_TIMEOUT_MS: 30_000,
@@ -130,7 +130,7 @@ function createTestApp() {
           document,
           uploadUrl: "https://storage.example/upload",
           expiresAt: "2026-01-01T00:05:00.000Z",
-          maxUploadBytes: 10_000_000,
+          maxUploadBytes: 4_000_000,
         };
       },
       async uploadDocument() {
@@ -185,6 +185,18 @@ function createTestApp() {
 }
 
 describe("authenticated document workflow API contracts", () => {
+  it("rejects raw document uploads larger than 4 MB", async () => {
+    const response = await request(createTestApp())
+      .put(`/api/v1/workspaces/${workspaceId}/documents/${documentId}/upload`)
+      .set("Cookie", "__Host-flowpilot_access=owner-session")
+      .set("Origin", config.APP_ORIGIN)
+      .set("Content-Type", "application/pdf")
+      .send(Buffer.alloc(4_000_001))
+      .expect(413);
+
+    expect(response.body.error.code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
   it("supports upload, workflow proposal/save, execution, and report retrieval", async () => {
     const app = createTestApp();
     const auth = (call: request.Test) =>

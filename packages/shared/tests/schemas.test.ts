@@ -42,7 +42,14 @@ describe("shared request schemas", () => {
       DocumentUploadRequestSchema.safeParse({
         filename: "file.pdf",
         mediaType: "application/pdf",
-        byteSize: 20_000_001,
+        byteSize: 4_000_000,
+      }).success,
+    ).toBe(true);
+    expect(
+      DocumentUploadRequestSchema.safeParse({
+        filename: "file.pdf",
+        mediaType: "application/pdf",
+        byteSize: 4_000_001,
       }).success,
     ).toBe(false);
   });

@@ -59,7 +59,7 @@ const FEATURES = [
     icon: FileText,
     title: "Document Processing",
     description:
-      "Upload PDF (up to 100 pages), DOCX, and UTF-8 TXT files up to 10 MB for bounded text extraction and AI analysis.",
+      "Upload PDF (up to 100 pages), DOCX, and UTF-8 TXT files up to 4 MB for bounded text extraction and AI analysis.",
   },
   {
     icon: Activity,

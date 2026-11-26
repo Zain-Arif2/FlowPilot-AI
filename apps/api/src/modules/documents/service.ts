@@ -5,6 +5,7 @@ import {
   DocumentSchema,
   DocumentUploadIntentSchema,
   DocumentUploadRequestSchema,
+  DOCUMENT_MAX_BYTES,
   assertDocumentBytes,
   assertDocumentFilename,
   documentExtensionForMediaType,
@@ -20,7 +21,7 @@ import {
   type ObjectStorage,
 } from "../../adapters/object-storage.js";
 
-const DEFAULT_MAX_UPLOAD_BYTES = 10_000_000;
+const DEFAULT_MAX_UPLOAD_BYTES = DOCUMENT_MAX_BYTES;
 const UPLOAD_INTENT_TTL_SECONDS = 15 * 60;
 
 type DocumentStorage = Pick<ObjectStorage, "uploadAsset" | "inspectAsset" | "deleteAsset">;

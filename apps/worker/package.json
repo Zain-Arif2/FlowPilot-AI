@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --env-file=../../.env --import tsx --watch src/main.ts",
     "build": "tsc --noEmit false --outDir dist",
-    "start": "node --enable-source-maps dist/src/main.js",
+    "start": "node --import tsx --enable-source-maps src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
     "mammoth": "^1.13.0",
     "pdfjs-dist": "^6.5.438",
     "pino": "^9.14.0",
+    "tsx": "^4.20.6",
     "zod": "^3.25.76"
   }
 }

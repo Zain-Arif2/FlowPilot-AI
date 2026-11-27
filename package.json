@@ -1,6 +1,7 @@
 {
   "name": "flowpilot-ai",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=24 <25"
   },

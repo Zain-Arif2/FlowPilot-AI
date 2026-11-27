@@ -10,7 +10,7 @@
     "api": {
       "root": "apps/api",
       "framework": "express",
-      "entrypoint": "src/server.ts",
+      "entrypoint": "src/server.mjs",
       "installCommand": "npm install --workspace=@flowpilot/api",
       "buildCommand": "npm --prefix ../.. run db:generate && npm --prefix ../.. run build --workspace=@flowpilot/api"
     }

@@ -8,11 +8,9 @@
       "buildCommand": "npm --prefix ../.. run build --workspace=@flowpilot/web"
     },
     "api": {
-      "root": "apps/api",
-      "framework": "express",
-      "entrypoint": "src/server.mjs",
-      "installCommand": "npm install --workspace=@flowpilot/api",
-      "buildCommand": "npm --prefix ../.. run db:generate && npm --prefix ../.. run build --workspace=@flowpilot/api"
+      "root": ".",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.api"
     }
   },
   "rewrites": [

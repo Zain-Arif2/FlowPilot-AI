@@ -132,34 +132,32 @@ const services = {
     await rateLimitRedis.ping();
   },
 };
-export const app = createApp(config, services);
-if (process.env.VERCEL !== "1") {
-  const server = app.listen(config.API_PORT, () => {
-    apiLogger.info({ port: config.API_PORT }, "FlowPilot API listening");
-  });
+const app = createApp(config, services);
+const server = app.listen(config.API_PORT, "0.0.0.0", () => {
+  apiLogger.info({ port: config.API_PORT }, "FlowPilot API listening");
+});
 
-  const shutdown = (): void => {
-    server.close((error) => {
-      if (error) {
-        apiLogger.error({ errorName: error.name }, "API shutdown failed");
-        process.exitCode = 1;
-      }
-      rateLimitRedis.disconnect();
-      void prisma.$disconnect().catch((disconnectError: unknown) => {
-        apiLogger.error(
-          {
-            errorName:
-              disconnectError instanceof Error
-                ? disconnectError.name
-                : "UNKNOWN",
-          },
-          "API database shutdown failed",
-        );
-        process.exitCode = 1;
-      });
+const shutdown = (): void => {
+  server.close((error) => {
+    if (error) {
+      apiLogger.error({ errorName: error.name }, "API shutdown failed");
+      process.exitCode = 1;
+    }
+    rateLimitRedis.disconnect();
+    void prisma.$disconnect().catch((disconnectError: unknown) => {
+      apiLogger.error(
+        {
+          errorName:
+            disconnectError instanceof Error
+              ? disconnectError.name
+              : "UNKNOWN",
+        },
+        "API database shutdown failed",
+      );
+      process.exitCode = 1;
     });
-  };
+  });
+};
 
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
-}
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);

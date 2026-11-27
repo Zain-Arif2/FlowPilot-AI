@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --env-file=../../.env --import tsx --watch src/server.ts",
     "build": "tsc --noEmit false --outDir dist",
-    "start": "node --enable-source-maps src/server.mjs",
+    "start": "node --enable-source-maps --import tsx src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
